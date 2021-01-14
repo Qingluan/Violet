@@ -41,7 +41,7 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 	case "get":
 		if args != nil {
 			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
-			self.driver.Get(args[0])
+			self.driver.Get(strings.TrimSpace(args[0]))
 			res.Text, res.Err = self.driver.PageSource()
 			if res.Err != nil {
 				return
@@ -96,23 +96,62 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 		} else {
 			self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
 		}
-	case "":
-		var ele selenium.WebElement
-		ele, res.Err = self.driver.FindElement(selenium.ByCSSSelector, id)
-		if args != nil {
-			res.Text, res.Err = ele.GetAttribute(args[0])
-		} else {
-			res.Text, res.Err = ele.Text()
-		}
 	case "js":
 		if args != nil {
-			_, res.Err = self.driver.ExecuteScript(args[0], nil)
+			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(args[0]), nil)
 		} else {
 			res.Err = fmt.Errorf("no args to execute js")
 		}
 	case "savescreen":
 	case "if":
+		var ele selenium.WebElement
+		ele, res.Err = self.driver.FindElement(selenium.ByCSSSelector, id)
+		if res.Err != nil {
+			return
+		}
+		if args != nil {
+			if len(args) == 2 {
+				res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
+				if res.Text != strings.TrimSpace(args[1]) {
+					res.Err = fmt.Errorf("not eq")
+				}
+			} else {
+				res.Text, res.Err = ele.Text()
+				if res.Text != strings.TrimSpace(args[0]) {
+					res.Err = fmt.Errorf("not eq")
+				}
+			}
 
+		}
+	case "end":
+	default:
+		var ele selenium.WebElement
+		ele, res.Err = self.driver.FindElement(selenium.ByCSSSelector, id)
+		if args != nil {
+			res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
+		} else {
+			res.Text, res.Err = ele.Text()
+		}
 	}
 	return Result{}
+}
+
+func (self *BaseBrowser) Parse(actions string) {
+	lines := strings.Split(actions, "\n")
+	var last Result
+	for no, action := range lines {
+		var result Result
+		if strings.Contains(action, ":") {
+			fs := strings.SplitN(strings.TrimSpace(action), ":", 2)
+			if strings.Contains(fs[1], ",") {
+				args := strings.Split(fs[1], ",")
+				result = self.Action(strings.TrimSpace(args[0]), strings.TrimSpace(fs[0]), args[1:]...)
+			} else {
+				result = self.Action(strings.TrimSpace(fs[1]), strings.TrimSpace(fs[0]))
+			}
+		} else {
+			result = self.Action("", strings.TrimSpace(action))
+		}
+
+	}
 }
