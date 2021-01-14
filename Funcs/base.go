@@ -15,9 +15,8 @@ type BaseBrowser struct {
 	driver       selenium.WebDriver
 }
 type Result struct {
-	Ele  selenium.WebElement
-	Text string
-	Err  error
+	Text string `json:"text"`
+	Err  error  `json:"err"`
 }
 
 func (self *BaseBrowser) Init() error {
@@ -112,6 +111,7 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 			res.Err = fmt.Errorf("no args to execute js")
 		}
 	case "savescreen":
+	case "if":
 
 	}
 	return Result{}
