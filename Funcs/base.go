@@ -14,7 +14,6 @@ type BaseBrowser struct {
 	PageLoadTime int    `json:"timeout"`
 	driver       selenium.WebDriver
 }
-
 type Result struct {
 	Ele  selenium.WebElement
 	Text string
@@ -106,6 +105,13 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 		} else {
 			res.Text, res.Err = ele.Text()
 		}
+	case "js":
+		if args != nil {
+			_, res.Err = self.driver.ExecuteScript(args[0], nil)
+		} else {
+			res.Err = fmt.Errorf("no args to execute js")
+		}
+	case "savescreen":
 
 	}
 	return Result{}
