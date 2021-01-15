@@ -59,6 +59,7 @@ type BaseBrowser struct {
 }
 type Result struct {
 	Text string `json:"text"`
+	Int  int    `json:"int"`
 	Err  error  `json:"err"`
 }
 
@@ -247,6 +248,11 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 		}
 	case "end":
 	case "for":
+		idint, iterr := strconv.Atoi(id)
+		if iterr == nil {
+			res.Int = idint
+			return
+		}
 		var ele selenium.WebElement
 		ele, res.Err = self.SmartFindEle(id)
 		if res.Err != nil {
@@ -315,6 +321,10 @@ func (self *BaseBrowser) Parse(actions string) {
 	forcondition := ""
 	forloop := false
 	for no, action := range lines {
+		if strings.HasPrefix(action, "#") {
+			log.Println("[comment]:", action)
+			continue
+		}
 		if forloop {
 			if strings.TrimSpace(action) == "endfor" {
 				forloop = false
@@ -325,17 +335,27 @@ func (self *BaseBrowser) Parse(actions string) {
 			}
 		}
 		if len(forstack) > 0 {
+			loopNum := 0
 			for {
 				subjump := false
 				for subno, subaction := range forstack {
 					subjump, last = oneLine(subno, subjump, subaction)
 				}
+
 				_, last := oneLine(-1, false, forcondition)
-				if last.Err != nil {
+				if last.Int != 0 && loopNum >= last.Int {
 					log.Println("[ENDFOR]:", last.Err)
 					forstack = []string{}
 					break
+				} else {
+					if last.Err != nil {
+						log.Println("[ENDFOR]:", last.Err)
+						forstack = []string{}
+						break
+					}
 				}
+				loopNum++
+
 			}
 		} else {
 			if strings.HasPrefix(strings.TrimSpace(action), "for:") {
