@@ -1,0 +1,8 @@
+get:https://cn.cgp640.xyz/hd?fr=loginok
+
+for://a[text() = '下一页 ›']
+    click://a[text() = '下一页 ›']
+    sleep: 1
+endfor
+
+js: alert("hello world");
