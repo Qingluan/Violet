@@ -149,11 +149,28 @@ func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err e
 	return
 }
 
+func (self *BaseBrowser) SmartFindEles(id string) (ele []selenium.WebElement, err error) {
+	if strings.HasPrefix(id, "/") {
+		ele, err = self.driver.FindElements(selenium.ByXPATH, id)
+	} else {
+		ele, err = self.driver.FindElements(selenium.ByCSSSelector, id)
+	}
+	return
+}
+
+func L(action string, args ...interface{}) {
+	e := color.New(color.FgGreen, color.Bold).SprintFunc()
+	pre := e("[" + action + "]")
+	// log.Println(args...)
+	log.Printf("[%s] : %v", pre, args)
+}
+
 func (self *BaseBrowser) Action(id string, action string, args ...string) (res Result) {
 	res = Result{}
 	e := color.New(color.FgGreen, color.Bold).SprintFunc()
 
 	defer log.Println(e("["+action+"]"), id, args)
+	defer time.Sleep(2 * time.Second)
 	switch action {
 	case "get":
 		if args != nil {
@@ -222,6 +239,8 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 	case "js":
 		if args != nil {
 			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(args[0]), nil)
+		} else if strings.TrimSpace(id) != "" {
+			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(id), nil)
 		} else {
 			res.Err = fmt.Errorf("no args to execute js")
 		}
@@ -276,6 +295,30 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 		}
 	}
 	return Result{}
+}
+
+func (self *BaseBrowser) EachFor(id string, stacks []string) (ifJumo bool, res Result) {
+	var eles []selenium.WebElement
+	eles, res.Err = self.SmartFindEles(id)
+	if res.Err != nil {
+		return
+	}
+	for _, ele := range eles {
+		for _, action := range stacks {
+			var tmp Result
+			switch action {
+			case "click":
+				tmp.Err = ele.Click()
+				if tmp.Err != nil {
+					L("each:click", tmp.Err.Error())
+					break
+				}
+			case "input":
+
+			}
+		}
+	}
+	return
 }
 
 func (self *BaseBrowser) Parse(actions string) {
