@@ -7,3 +7,4 @@ for:4
 endfor
 
 js: alert("hello world");
+sleep:100

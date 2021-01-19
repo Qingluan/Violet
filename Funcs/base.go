@@ -1,14 +1,17 @@
 package Funcs
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/alyu/configparser"
 	"github.com/fatih/color"
 	"github.com/tebeka/selenium"
@@ -51,20 +54,43 @@ actions:
 
 */
 type BaseBrowser struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	PageLoadTime int    `json:"timeout"`
-	driver       selenium.WebDriver
-	service      *selenium.Service
+	Name            string `json:"name"`
+	Path            string `json:"path"`
+	PageLoadTime    int    `json:"timeout"`
+	Mode            int
+	lines           []string
+	forstack        [][]string
+	forLoopTestArgs []string
+	loopCount       int
+	loopNow         int
+	TmpPage         string
+	TmpID           string
+	driver          selenium.WebDriver
+	tmpEles         []selenium.WebElement
+	service         *selenium.Service
+	OperStack       []string
+	OperStackWhere  [][]int
+	OperNow         string
 }
 type Result struct {
-	Text string `json:"text"`
-	Int  int    `json:"int"`
-	Err  error  `json:"err"`
+	Action string `json:"action"`
+	Text   string `json:"text"`
+	Err    error  `json:"err"`
+	Int    int    `json:"int"`
+	Bool   bool   `json:"bool"`
 }
 
 var (
+	Green           = color.New(color.FgGreen).SprintFunc()
+	Bold            = color.New(color.Bold).SprintFunc()
+	Red             = color.New(color.FgRed).SprintFunc()
 	DefaultConfPath = *flag.String("conf", "conf.ini", "default conf path")
+	MODE_FLOW       = 0
+	MODE_FOR        = 1
+	MODE_EACH       = 2
+	MODE_IF         = 3
+	MODE_FOR_RUN    = 4
+	MODE_EACH_RUN   = 5
 )
 
 const (
@@ -162,259 +188,131 @@ func L(action string, args ...interface{}) {
 	e := color.New(color.FgGreen, color.Bold).SprintFunc()
 	pre := e("[" + action + "]")
 	// log.Println(args...)
+
 	log.Printf("[%s] : %v", pre, args)
 }
 
-func (self *BaseBrowser) Action(id string, action string, args ...string) (res Result) {
-	res = Result{}
-	e := color.New(color.FgGreen, color.Bold).SprintFunc()
-
-	defer log.Println(e("["+action+"]"), id, args)
-	defer time.Sleep(2 * time.Second)
-	switch action {
-	case "get":
-		if args != nil {
-			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
-			self.driver.Get(strings.TrimSpace(args[0]))
-			res.Text, res.Err = self.driver.PageSource()
-			if res.Err != nil {
-				return
-			}
-		} else if strings.HasPrefix(id, "http") {
-			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
-			self.driver.Get(id)
-			res.Text, res.Err = self.driver.PageSource()
-			if res.Err != nil {
-				return
-			}
-		} else {
-			res.Err = fmt.Errorf("need url !!! %s", id)
-		}
-	case "click":
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-
-		if res.Err != nil {
-			return
-		}
-		if res.Err = ele.Click(); res.Err != nil {
-			return
-		}
-		res.Text, res.Err = self.driver.PageSource()
-	case "input":
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-
-		if res.Err != nil {
-			return
-		}
-		if res.Err = ele.Clear(); res.Err != nil {
-			return
-		}
-
-		// Enter some new code in text box.
-		if args == nil {
-			res.Text, res.Err = self.driver.PageSource()
-			return
-		}
-		res.Err = ele.SendKeys(args[0])
-	case "sleep":
-		if sleepI, err := strconv.Atoi(id); err != nil {
-			res.Err = err
-		} else {
-			time.Sleep(time.Second * time.Duration(sleepI))
-		}
-	case "scroll":
-		if id != "" {
-			var ele selenium.WebElement
-			ele, res.Err = self.SmartFindEle(id)
-			if res.Err != nil {
-				return
-			}
-			_, res.Err = ele.LocationInView()
-			// self.driver.ExecuteScript("arguments[0].scrollIntoView(true);", ele)
-		} else {
-			self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
-		}
-	case "js":
-		if args != nil {
-			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(args[0]), nil)
-		} else if strings.TrimSpace(id) != "" {
-			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(id), nil)
-		} else {
-			res.Err = fmt.Errorf("no args to execute js")
-		}
-	case "savescreen":
-	case "if":
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-		if res.Err != nil {
-			return
-		}
-		if args != nil {
-			if len(args) == 2 {
-				res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
-				if res.Text != strings.TrimSpace(args[1]) {
-					res.Err = fmt.Errorf("not eq")
-				}
-			} else {
-				res.Text, res.Err = ele.Text()
-				if res.Text != strings.TrimSpace(args[0]) {
-					res.Err = fmt.Errorf("not eq")
-				}
-			}
-
-		}
-	case "end":
-	case "for":
-		idint, iterr := strconv.Atoi(id)
-		if iterr == nil {
-			res.Int = idint
-			return
-		}
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-		if res.Err != nil {
-			return
-		}
-		if args != nil {
-			res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
-		} else {
-			res.Text, res.Err = ele.Text()
-		}
-	default:
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-		if res.Err != nil {
-			return
-		}
-		if args != nil {
-			res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
-		} else {
-			res.Text, res.Err = ele.Text()
-		}
+func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) string {
+	ss := make(map[string]string)
+	ss["text"] = s.Text()
+	ss["html"], _ = s.Html()
+	for _, k := range key {
+		ss[k] = s.AttrOr(k, "")
 	}
-	return Result{}
+	res, _ := json.Marshal(&ss)
+	return string(res)
 }
 
-func (self *BaseBrowser) EachFor(id string, stacks []string) (ifJumo bool, res Result) {
-	var eles []selenium.WebElement
-	eles, res.Err = self.SmartFindEles(id)
-	if res.Err != nil {
+func (self *BaseBrowser) ActionEle(id string, page []byte, stacks [][]string) (res Result) {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(page))
+	if err != nil {
+		res.Err = err
 		return
 	}
-	for _, ele := range eles {
-		for _, action := range stacks {
-			var tmp Result
-			switch action {
-			case "click":
-				tmp.Err = ele.Click()
-				if tmp.Err != nil {
-					L("each:click", tmp.Err.Error())
-					break
-				}
-			case "input":
+	doc.Find(id).Each(func(i int, s *goquery.Selection) {
+		for _, args := range stacks {
+			argc := len(args)
+			if argc < 2 {
+				continue
+			}
+			// id := args[1]
+			main := args[0]
 
+			switch main {
+			case "save":
+				switch argc {
+				case 1:
+					fp, err := os.OpenFile(args[1], os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
+					if err != nil {
+						res.Err = err
+						return
+					}
+					defer fp.Close()
+					_, res.Err = fp.WriteString(self.EleToJsonString(s, args[1:]...) + "\n")
+					// for _, ele := range eles {
+					// 	_, res.Err = fp.WriteString(ele.Text())
+					// }
+				}
+			case "print":
+				L("show", self.EleToJsonString(s, args[1:]...))
+			case "find":
+				s.Find(args[1]).Each(func(i int, s *goquery.Selection) {
+					L("find", args[1], s.Text())
+				})
 			}
 		}
-	}
+	})
+
 	return
 }
 
-func (self *BaseBrowser) Parse(actions string) {
-	lines := strings.Split(actions, "\n")
-	var last Result
-	ifjump := false
+func (self *BaseBrowser) oneLine(no int, ifInCondition bool, args []string) (ifJUmp bool, result Result) {
 
-	oneLine := func(no int, condition bool, action string) (ifJUmp bool, result Result) {
-		var oper string
-		// defer logrus.Info("Run:")
-		action = strings.TrimSpace(action)
-		if action == "" {
-			return
-		}
-		if condition {
-			if action == "end" {
-				return
-			}
-		}
-		if strings.Contains(action, ":") {
-			fs := strings.SplitN(strings.TrimSpace(action), ":", 2)
-			if strings.Contains(fs[1], ",") {
-				args := strings.Split(fs[1], ",")
-				oper = strings.TrimSpace(args[0])
-				result = self.Action(strings.TrimSpace(args[0]), oper, args[1:]...)
-			} else {
-				oper = strings.TrimSpace(fs[0])
-				result = self.Action(strings.TrimSpace(fs[1]), strings.TrimSpace(fs[0]))
-			}
-		} else {
-			oper = strings.TrimSpace(action)
-			result = self.Action("", oper)
-		}
-		if oper == "if" {
-			if result.Err != nil {
-				ifJUmp = true
-			}
-		}
-
+	argc := len(args)
+	if argc == 0 {
 		return
 	}
-	forstack := []string{}
-	forcondition := ""
-	forloop := false
-	for no, action := range lines {
-		if strings.HasPrefix(action, "#") {
-			log.Println("[comment]:", action)
-			continue
+	main := args[0]
+	if ifInCondition {
+		if main == "end" {
+			return
 		}
-		if forloop {
-			if strings.TrimSpace(action) == "endfor" {
-				forloop = false
-				continue
-			} else {
-				forstack = append(forstack, action)
-				continue
-			}
+	}
+	if main == "" {
+		L("All is Empty")
+		return
+	}
+	if argc > 2 {
+		result = self.Action(args[1], main, args[2:]...)
+	} else if argc > 1 {
+		result = self.Action(args[1], main)
+	} else {
+		result = self.Action("", main)
+	}
+	if main == "if" {
+		if result.Err != nil {
+			ifJUmp = true
 		}
-		if len(forstack) > 0 {
-			loopNum := 0
-			for {
-				subjump := false
-				for subno, subaction := range forstack {
-					subjump, last = oneLine(subno, subjump, subaction)
-				}
+	}
 
-				_, last := oneLine(-1, false, forcondition)
-				if last.Int != 0 && loopNum >= last.Int {
-					log.Println("[ENDFOR]:", last.Err)
-					forstack = []string{}
-					break
-				} else {
-					if last.Err != nil {
-						log.Println("[ENDFOR]:", last.Err)
-						forstack = []string{}
-						break
-					}
-				}
-				loopNum++
+	return
+}
 
-			}
+func (self *BaseBrowser) ConsoleLog(result Result) {
+	if result.Err != nil {
+		if result.Err != nil && !strings.Contains(result.Err.Error(), "Timed out receiving message from renderer") {
+			// log.Println(no, action, result.Err)
+			log.Println(color.New(color.FgHiRed).SprintFunc()("[ENDFOR]"), ":", result.Err)
+			self.switchMode()
+		}
+
+		// break
+	} else {
+		log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, "---------------------------------------"))
+	}
+}
+
+func (self *BaseBrowser) RunForStack() {
+	self.loopNow = 0
+	// var last Result
+	for {
+		subjump := false
+		for subno, subargs := range self.forstack {
+			subjump, _ = self.oneLine(subno, subjump, subargs)
+		}
+		_, last := self.oneLine(-1, false, self.forLoopTestArgs)
+		if self.loopCount != 0 && self.loopNow >= self.loopCount {
+			log.Println("[ENDFOR]:", last.Err)
+			self.switchMode()
+			break
 		} else {
-			if strings.HasPrefix(strings.TrimSpace(action), "for:") {
-				forloop = true
-				forcondition = strings.TrimSpace(action)
-				log.Println("[FOR]:", forcondition)
-				continue
-			} else {
-				ifjump, last = oneLine(no, ifjump, action)
-				if last.Err != nil && !strings.Contains(last.Err.Error(), "Timed out receiving message from renderer") {
-					log.Println(no, action, last.Err)
-				}
-
+			if last.Bool {
+				self.switchMode()
+				break
 			}
 		}
-
+		self.ConsoleLog(last)
+		self.loopNow++
 	}
 }
 
@@ -426,4 +324,36 @@ func (self *BaseBrowser) ExecuteByFile(template string) (err error) {
 	self.Parse(string(buf))
 	// defer fp.Close()
 	return
+}
+
+func splitArgsTrim(raw string) (as []string) {
+	for _, w := range strings.SplitN(raw, ":", 2) {
+		as = append(as, strings.TrimSpace(w))
+	}
+	if len(as) > 1 {
+		if strings.Contains(as[1], ":") {
+			argsStr := as[1]
+			as = []string{as[0]}
+			for _, w2 := range strings.Split(argsStr, ",") {
+				as = append(as, strings.TrimSpace(w2))
+			}
+		}
+	}
+	return
+}
+
+func (self *BaseBrowser) switchMode(modes ...int) {
+	ac := MODE_FLOW
+	if modes != nil {
+		ac = modes[0]
+	}
+	switch ac {
+	case MODE_FLOW:
+		self.forstack = [][]string{}
+		self.forLoopTestArgs = []string{}
+		self.TmpID = ""
+		self.TmpPage = ""
+	}
+	self.Mode = ac
+
 }
