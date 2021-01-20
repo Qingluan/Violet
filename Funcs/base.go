@@ -68,9 +68,10 @@ type BaseBrowser struct {
 	driver          selenium.WebDriver
 	tmpEles         []selenium.WebElement
 	service         *selenium.Service
-	OperStack       []string
-	OperStackWhere  [][]int
-	OperNow         string
+	OperStack       []Stack
+	// OperStackWhere  [][]int
+	// OperNow         string
+	NextLine int
 }
 type Result struct {
 	Action string `json:"action"`

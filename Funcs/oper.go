@@ -114,7 +114,9 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 					res.Err = fmt.Errorf("not eq")
 				}
 			}
-
+		}
+		if res.Err == nil {
+			res.Bool = true
 		}
 	case "end":
 	case "for":
@@ -136,7 +138,7 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 		} else {
 			res.Text, res.Err = ele.Text()
 		}
-		if res.Err != nil {
+		if res.Err == nil {
 			res.Bool = true
 			// return
 		}
@@ -155,153 +157,187 @@ func (self *BaseBrowser) Action(id string, action string, args ...string) (res R
 	return Result{}
 }
 
-func (self *BaseBrowser) Parse(actions string) {
-	self.lines = strings.Split(actions, "\n")
-	var last Result
-	ifjump := false
-	// Mode := MODE_FLOW
-
-	// forstack := []string{}
-	// forconditionargs := []string{}
-	// forloop := false
-	for no, action := range self.lines {
-
-		args := splitArgsTrim(action)
-		if self.PreTest(args) {
-			continue
-		}
-
-		switch self.Mode {
-		case MODE_FOR_RUN:
-			self.RunForStack()
-			self.switchMode()
-		case MODE_EACH_RUN:
-			self.ActionEle(self.TmpID, []byte(self.TmpPage), self.forstack)
-			self.switchMode()
-
-		case MODE_FLOW:
-			switch args[0] {
-			case "for":
-				self.AddOper(no, "for")
-				self.switchMode(MODE_FOR)
-				self.forLoopTestArgs = splitArgsTrim(action)
-				log.Println("[FOR]:", strings.Join(self.forLoopTestArgs, " - "))
-				// continue
-			case "each":
-
-				self.AddOper(no, "each")
-				self.switchMode(MODE_EACH)
-				// self.forLoopTestArgs = splitArgsTrim(action)
-				log.Println("[EACH]:", strings.Join(self.forLoopTestArgs, " - "))
-				var err error
-
-				self.TmpPage, err = self.driver.PageSource()
-				self.TmpID = args[1]
-				if err != nil {
-					log.Fatal(Red("[ERR]"), ":", Bold(err.Error()))
-					break
-				}
-			default:
-				ifjump, last = self.oneLine(no, ifjump, args)
-				self.ConsoleLog(last)
-			}
-		}
-
-	}
-}
-
-func (self *BaseBrowser) AddOper(no int, oper string) {
-	self.OperStack = append(self.OperStack, oper)
-	self.OperNow = oper
-	self.OperStackWhere = append(self.OperStackWhere, []int{no})
-}
-
-func (self *BaseBrowser) PreTest(no int, args []string) bool {
-	if strings.HasPrefix(args[0], "#") {
-		log.Println("[comment]:", strings.Join(args, " "))
-		return true
-	}
-	if len(args) == 0 {
-		return true
-	}
-	if self.OperNow != "" {
-		if args[0] == "end" {
-			lastStackWhere := self.OperStackWhere[len(self.OperStackWhere)-1]
-			lastStackWhere = append(lastStackWhere, no)
-			self.RunStack()
-			self.OperStack = self.OperStack[:len(self.OperStack)-1]
-		} else {
-			self.forstack = append(self.forstack, args)
-		}
-	}
-
-	// switch self.Mode {
-	// case MODE_FOR:
-	// 	if args[0] == "endfor" {
-	// 		self.switchMode(MODE_FOR_RUN)
-	// 	} else {
-	// 		self.forstack = append(self.forstack, args)
-	// 	}
-	// 	return true
-	// case MODE_EACH:
-	// 	if args[0] == "endeach" {
-	// 		self.switchMode(MODE_EACH_RUN)
-	// 	} else {
-	// 		self.forstack = append(self.forstack, args)
-	// 	}
-	// 	return true
-	// }
-	return false
-}
-
-func (self *BaseBrowser) RunStack() {
+func (self *BaseBrowser) RunThenBack(no int) (result Result) {
+	tmpNextLine := self.NextLine
 	defer func() {
-		if len(self.OperStack) != 0 {
-			self.OperNow = self.OperStack[len(self.OperStack)-1]
-		} else {
-			self.OperNow = ""
-		}
-		self.OperStackWhere = self.OperStackWhere[:len(self.OperStackWhere)-1]
+		self.NextLine = tmpNextLine
 	}()
-	wheres := self.OperStackWhere[len(self.OperStackWhere)-1]
-	if len(wheres) != 2 {
-		log.Fatal("error must where is 2", wheres)
-	}
-	for i := wheres[0]; i < wheres[1]; i++ {
-		// args := splitArgsTrim(self.lines[i])
-		self.runLine(i)
-	}
+	self.NextLine = no
+	result = self.StepRun()
+	return
 }
 
-func (self *BaseBrowser) runLine(no int) {
-	args := splitArgsTrim(self.lines[no])
-	if len(args) == 0 {
-		log.Fatal("no line found!!!")
+func (self *BaseBrowser) RunNextLine() (result Result) {
+	line := self.lines[self.NextLine]
+	args := splitArgsTrim(line)
+	argc := len(args)
+
+	defer func() {
+		if args[0] == "end" {
+			stack := self.GetStack()
+			if stack != nil {
+				if stack.End == 0 {
+					self.PushStack(self.NextLine, "end")
+					stack.End = self.NextLine
+				}
+				if stack.Oper == "for" {
+					if tmp := self.RunThenBack(stack.Start); tmp.Bool {
+						self.NextLine = stack.Start + 1
+					} else {
+						self.NextLine = stack.End + 1
+					}
+				} else if stack.Oper == "if" {
+					self.NextLine++
+					self.switchMode()
+				}
+			} else {
+				log.Fatal("Ilegal End , end must match \"for\", \"each\". \"if\" ")
+			}
+		} else {
+			self.NextLine++
+		}
+	}()
+
+	if argc == 0 {
 		return
 	}
-	switch args[0] {
-	case "for":
-		self.AddOper(no, "for")
-		self.switchMode(MODE_FOR)
-		// self.forLoopTestArgs = splitArgsTrim(action)
-		log.Println("[FOR]:", strings.Join(self.forLoopTestArgs, " - "))
-		// continue
-	case "each":
 
-		self.AddOper(no, "each")
-		self.switchMode(MODE_EACH)
-		// self.forLoopTestArgs = splitArgsTrim(action)
-		log.Println("[EACH]:", strings.Join(self.forLoopTestArgs, " - "))
-		var err error
+	if strings.HasPrefix(args[0], "#") {
+		L("comment", strings.Join(args, " "))
+		return
+	}
+	switch self.Mode {
+	case MODE_IF:
+	default:
+		switch args[0] {
+		case "for":
+			self.PushStack(self.NextLine, "for")
+		case "if":
+			self.PushStack(self.NextLine, "if")
+			if tmp := self.RunThenBack(self.NextLine); !tmp.Bool {
+				self.switchMode(MODE_IF)
+			}
+		}
+		result = self.StepRun()
+	}
+	return
+}
 
-		self.TmpPage, err = self.driver.PageSource()
-		self.TmpID = args[1]
-		if err != nil {
-			log.Fatal(Red("[ERR]"), ":", Bold(err.Error()))
+func (self *BaseBrowser) StepRun() (result Result) {
+	args := splitArgsTrim(self.lines[self.NextLine])
+	argc := len(args)
+	if argc == 0 {
+		L("Err", "err for empty")
+		return
+	}
+	main := args[0]
+	if argc > 2 {
+		result = self.Action(args[1], main, args[2:]...)
+	} else if argc > 1 {
+		result = self.Action(args[1], main)
+	} else {
+		result = self.Action("", main)
+	}
+	return
+}
+
+func (self *BaseBrowser) Parse(actions string) {
+	self.lines = strings.Split(actions, "\n")
+	linenum := len(self.lines)
+	var last Result
+	for {
+		if self.NextLine >= linenum {
 			break
 		}
-	default:
-		self.ifjump, last = self.oneLine(no, self.ifjump, args)
+		last = self.RunNextLine()
 		self.ConsoleLog(last)
 	}
 }
+
+// func (self *BaseBrowser) Parse(actions string) {
+// 	self.lines = strings.Split(actions, "\n")
+// 	var last Result
+// 	ifjump := false
+// 	// Mode := MODE_FLOW
+
+// 	// forstack := []string{}
+// 	// forconditionargs := []string{}
+// 	// forloop := false
+// 	for no, action := range self.lines {
+
+// 		args := splitArgsTrim(action)
+// 		if self.PreTest(args) {
+// 			continue
+// 		}
+
+// 		switch self.Mode {
+// 		case MODE_FOR_RUN:
+// 			self.RunForStack()
+// 			self.switchMode()
+// 		case MODE_EACH_RUN:
+// 			self.ActionEle(self.TmpID, []byte(self.TmpPage), self.forstack)
+// 			self.switchMode()
+
+// 		case MODE_FLOW:
+// 			switch args[0] {
+// 			case "for":
+// 				self.AddOper(no, "for")
+// 				self.switchMode(MODE_FOR)
+// 				self.forLoopTestArgs = splitArgsTrim(action)
+// 				log.Println("[FOR]:", strings.Join(self.forLoopTestArgs, " - "))
+// 				// continue
+// 			case "each":
+
+// 				self.AddOper(no, "each")
+// 				self.switchMode(MODE_EACH)
+// 				// self.forLoopTestArgs = splitArgsTrim(action)
+// 				log.Println("[EACH]:", strings.Join(self.forLoopTestArgs, " - "))
+// 				var err error
+
+// 				self.TmpPage, err = self.driver.PageSource()
+// 				self.TmpID = args[1]
+// 				if err != nil {
+// 					log.Fatal(Red("[ERR]"), ":", Bold(err.Error()))
+// 					break
+// 				}
+// 			default:
+// 				ifjump, last = self.oneLine(no, ifjump, args)
+// 				self.ConsoleLog(last)
+// 			}
+// 		}
+
+// 	}
+// }
+
+// func (self *BaseBrowser) runLine(no int) {
+// 	args := splitArgsTrim(self.lines[no])
+// 	if len(args) == 0 {
+// 		log.Fatal("no line found!!!")
+// 		return
+// 	}
+// 	switch args[0] {
+// 	case "for":
+// 		self.AddOper(no, "for")
+// 		self.switchMode(MODE_FOR)
+// 		// self.forLoopTestArgs = splitArgsTrim(action)
+// 		log.Println("[FOR]:", strings.Join(self.forLoopTestArgs, " - "))
+// 		// continue
+// 	case "each":
+
+// 		self.AddOper(no, "each")
+// 		self.switchMode(MODE_EACH)
+// 		// self.forLoopTestArgs = splitArgsTrim(action)
+// 		log.Println("[EACH]:", strings.Join(self.forLoopTestArgs, " - "))
+// 		var err error
+
+// 		self.TmpPage, err = self.driver.PageSource()
+// 		self.TmpID = args[1]
+// 		if err != nil {
+// 			log.Fatal(Red("[ERR]"), ":", Bold(err.Error()))
+// 			break
+// 		}
+// 	default:
+// 		self.ifjump, last = self.oneLine(no, self.ifjump, args)
+// 		self.ConsoleLog(last)
+// 	}
+// }
