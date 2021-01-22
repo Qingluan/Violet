@@ -1,0 +1,4 @@
+{
+    "cookie": "cookie_jump_url_systype%3DAIM%3B+cookie_jump_url_sysname_en%3DAIM%2520System%3B+cookie_jump_url_sysname_zh%3DAIM%3B+cookie_jump_url_sysname%3D%3B+cookie_jump_url_systurl%3Dhttps%253A%2F%2Fdbdc2019.sedns.cn%253A13431%2Faim%2Findex.html%3B+md5UserName%3D2b780e89de16cd2d5dca253b62b99f30%3B+session_key_ygsafe%3D674DC42E671A44028D1DDA88235A051F_session_34065%3B",
+    "url": "https://dbdc2019.sedns.cn:13431/main.html"
+}

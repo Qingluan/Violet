@@ -176,8 +176,12 @@ func parseToJsonOrStruct(raw string, obj ...interface{}) (datas Dict, err error)
 	}
 	datas = make(Dict)
 	for _, field := range strings.Split(rawU, ";") {
-		fs := strings.SplitN(field, "=", 2)
-		datas[strings.TrimSpace(fs[0])] = strings.TrimSpace(fs[1])
+		if strings.Contains(field, "=") {
+			fs := strings.SplitN(field, "=", 2)
+			datas[strings.TrimSpace(fs[0])] = strings.TrimSpace(fs[1])
+		} else {
+			L("ignore cookie:", field)
+		}
 	}
 	buf, err := json.Marshal(&datas)
 	if err != nil {

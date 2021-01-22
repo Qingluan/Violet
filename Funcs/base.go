@@ -84,12 +84,13 @@ var (
 	Red             = color.New(color.FgRed).SprintFunc()
 	Yellow          = color.New(color.FgYellow).SprintFunc()
 	DefaultConfPath = *flag.String("conf", "conf.ini", "default conf path")
-	MODE_FLOW       = 0
-	MODE_FOR        = 1
-	MODE_EACH       = 2
-	MODE_IF         = 3
-	MODE_FOR_RUN    = 4
-	MODE_EACH_RUN   = 5
+
+	MODE_FLOW     = 0
+	MODE_FOR      = 1
+	MODE_EACH     = 2
+	MODE_IF       = 3
+	MODE_FOR_RUN  = 4
+	MODE_EACH_RUN = 5
 )
 
 const (
@@ -101,8 +102,10 @@ func GenerateBaseConf() {
 	fmt.Println(`
 [base]
 browser = chrome
-path = chromedriver.exe
+path = chromedriver
+#path = chromedriver.exe
 timeout = 4
+	
 	`)
 }
 
@@ -113,6 +116,9 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 		return
 	}
 	b, err := conf.Section("base")
+	if err != nil {
+		return
+	}
 	browser = new(BaseBrowser)
 	browser.Name = b.ValueOf("browser")
 	browser.Path = b.ValueOf("path")
@@ -127,7 +133,18 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 func (self *BaseBrowser) Init() error {
 	ops := []selenium.ServiceOption{}
 	caps := selenium.Capabilities{
-		"browserName": self.Name, // "chrome", or any other
+		"browserName":         self.Name, // "chrome", or any other
+		"acceptInsecureCerts": true,
+		"args": []string{
+			//https://peter.sh/experiments/chromium-command-line-switches/
+			"--disable-gpu",
+			"--disable-web-security",
+			"--headless",
+			"--ignore-certificate-errors",
+			"--log-level=0", // INFO = 0, WARNING = 1, LOG_ERROR = 2, LOG_FATAL = 3
+			"--no-sandbox",
+			"--window-size=1024x768",
+		},
 		// "phantomjs.binary.path": self.Path, // path to binary from http://phantomjs.org/
 	}
 
@@ -141,6 +158,18 @@ func (self *BaseBrowser) Init() error {
 		}
 		self.driver = driver
 	default:
+		// caps := chrome.Capabilities{
+		// 	Args: []string{ // https://peter.sh/experiments/chromium-command-line-switches/
+		// 		"--disable-gpu",
+		// 		"--disable-web-security",
+		// 		"--headless",
+		// 		"--ignore-certificate-errors",
+		// 		// "--log-level=2", // INFO = 0, WARNING = 1, LOG_ERROR = 2, LOG_FATAL = 3
+		// 		// "--no-sandbox",
+		// 		"--window-size=1024x768",
+		// 	},
+		// }
+		// }
 		service, err := selenium.NewChromeDriverService(self.Path, port, ops...)
 		if err != nil {
 			return err

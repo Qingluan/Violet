@@ -1,7 +1,9 @@
 package Funcs
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -87,7 +89,27 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 
 		if name, ok := kargs["name"]; ok {
 			// var ele selenium.WebElement
-			ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/../..//input[@type=\"text\"]")
+			var pwdele selenium.WebElement
+
+			pwdele, res.Err = self.SmartFindEle("//input[@type=\"password\"]")
+			if res.Err != nil {
+				return
+			}
+			pa := "../"
+			limit := 20
+			i := 0
+			for {
+				if i > limit {
+					break
+				}
+				pa += "../"
+				form, err := self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/form")
+				if err == nil && form != nil {
+					break
+				}
+				i++
+			}
+			ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/input[@type=\"text\"]")
 			if res.Err != nil {
 				return
 			}
@@ -97,18 +119,17 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			}
 			L("User -- >", name.(string))
 			if pwd, ok := kargs["password"]; ok {
-				ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]")
 				if res.Err != nil {
 					return
 				}
-				res.Err = ele.SendKeys(pwd.(string))
+				res.Err = pwdele.SendKeys(pwd.(string))
 
 				L("Pwd -- >", pwd.(string))
 				self.Sleep()
 				if end, ok := kargs["end"]; ok {
 					switch end.(string) {
 					case "\n":
-						ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/../..//*[@type=\"submit\"]")
+						ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/*[@type=\"submit\"]")
 						if res.Err != nil {
 							return
 						}
@@ -194,11 +215,21 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	case "refresh":
 		self.driver.Refresh()
 	case "load":
+		if id != "" {
+			fs, err := ioutil.ReadFile(id)
+			if err == nil {
+				d := make(Dict)
+				if err := json.Unmarshal(fs, &d); err == nil {
+					kargs = d
+				}
+			}
+		}
 		if newurl, ok := kargs["url"]; ok {
 			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
 			res.Err = self.driver.Get(strings.TrimSpace(newurl.(string)))
 
 		}
+
 		if cookie, ok := kargs["cookie"]; ok {
 			u, err := self.driver.CurrentURL()
 			if err != nil {
@@ -211,10 +242,16 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				return
 			}
 			cookies, err := parseCookie(cookie.(string), urlObj.Host)
+			self.driver.DeleteAllCookies()
 			for _, c := range cookies {
-				self.driver.AddCookie(c)
+
+				err := self.driver.AddCookie(c)
+				if err != nil {
+					L("----- Add Cookie err ----", Yellow(err))
+				}
 				L("---- Add Cookie ----", c.Name, " : ", c.Value, " in :", c.Domain)
 			}
+			self.driver.ExecuteScriptRaw("alert(document.cookie)", nil)
 			self.driver.Refresh()
 		}
 		// if header, ok := kargs[""]
@@ -246,6 +283,33 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(id), nil)
 		} else {
 			res.Err = fmt.Errorf("no args to execute js")
+		}
+	case "save":
+		if id == "" {
+			return
+		}
+		// fp, err := os.OpenFile(id, os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+		fp, err := os.Create(id)
+
+		if err != nil {
+			res.Err = err
+			return
+		}
+		defer fp.Close()
+		if _, ok := kargs["cookie"]; ok {
+			if cs, err := self.driver.GetCookies(); err != nil {
+				res.Err = err
+			} else {
+				msg := ""
+				for _, c := range cs {
+					msg += fmt.Sprintf("%s=%s; ", c.Name, c.Value)
+				}
+				d := make(Dict)
+				d["cookie"] = url.QueryEscape(strings.TrimSpace(msg))
+				d["url"], _ = self.driver.CurrentURL()
+				buf, _ := json.MarshalIndent(&d, "", "    ")
+				fp.Write(buf)
+			}
 		}
 	case "savescreen":
 		if id != "" {
