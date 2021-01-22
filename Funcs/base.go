@@ -179,14 +179,14 @@ func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err e
 
 		}
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
-		text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", text))
+		// text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
-		text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", text))
+		// text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else {
-		text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", text))
+		// text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
 	}
 
 	if err != nil {

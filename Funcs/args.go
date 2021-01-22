@@ -1,6 +1,13 @@
 package Funcs
 
-import "strings"
+import (
+	"encoding/json"
+	"math"
+	"net/url"
+	"strings"
+
+	"github.com/tebeka/selenium"
+)
 
 type Dict map[string]interface{}
 
@@ -13,6 +20,7 @@ func splitArgsTrim(raw string) (as []string, kargs Dict) {
 	}
 
 	kas := []string{}
+	// L("argc :", len(as))
 	if len(as) > 1 {
 		if strings.Contains(as[1], ",") {
 			argsStr := as[1]
@@ -25,6 +33,18 @@ func splitArgsTrim(raw string) (as []string, kargs Dict) {
 
 				}
 
+			}
+		} else {
+			needremove := []string{}
+			for i := range as {
+				w2 := as[i]
+				if isKargs(w2) {
+					kas = append(kas, parseArg(w2))
+					needremove = append(needremove, w2)
+				}
+			}
+			for _, is := range needremove {
+				as = remove(as, is)
 			}
 		}
 
@@ -51,14 +71,14 @@ func isKargs(raw string) (ok bool) {
 
 				if strings.Count(w2, "'")%2 == 0 || strings.Count(w2, "\"")%2 == 0 {
 
-					L("isKargs", w2)
+					// L("isKargs", w2)
 					ok = true
 				}
 			} else if strings.Count(w2, "[") == 1 || strings.Count(w2, "]") == 1 {
 
 				if strings.Count(w2, "'")%2 == 0 || strings.Count(w2, "\"")%2 == 0 {
 
-					L("isKargs", w2)
+					// L("isKargs", w2)
 					ok = true
 				}
 				// L("isKargs", w2)
@@ -147,4 +167,57 @@ func splitargs(raw string) []string {
 		return
 	})
 	return a
+}
+
+func parseToJsonOrStruct(raw string, obj ...interface{}) (datas Dict, err error) {
+	rawU, err := url.QueryUnescape(raw)
+	if err != nil {
+		return
+	}
+	datas = make(Dict)
+	for _, field := range strings.Split(rawU, ";") {
+		fs := strings.SplitN(field, "=", 2)
+		datas[strings.TrimSpace(fs[0])] = strings.TrimSpace(fs[1])
+	}
+	buf, err := json.Marshal(&datas)
+	if err != nil {
+		return
+	}
+	if obj != nil {
+		err = json.Unmarshal(buf, obj[0])
+	}
+	return
+}
+
+func parseCookie(raw string, url string) (cs []*selenium.Cookie, err error) {
+	datas, err := parseToJsonOrStruct(raw)
+	if err != nil {
+		return
+	}
+	for k, v := range datas {
+		c := &selenium.Cookie{
+			Name:   k,
+			Value:  v.(string),
+			Expiry: math.MaxUint32,
+			Domain: url,
+			Path:   "/",
+		}
+		cs = append(cs, c)
+	}
+	return
+}
+
+func remove(slice []string, one string) []string {
+	s := -1
+	for i, v := range slice {
+		if v == one {
+			s = i
+			break
+		}
+	}
+	if s > 0 {
+		return append(slice[:s], slice[s+1:]...)
+	} else {
+		return slice
+	}
 }

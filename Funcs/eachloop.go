@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -43,6 +44,12 @@ func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) st
 }
 
 func WithEle(args []string, kargs Dict, s *goquery.Selection, do func(sb *goquery.Selection, args []string)) {
+	if ifcondition, ok := kargs["contains"]; ok {
+		if !strings.Contains(s.Text(), ifcondition.(string)) {
+			L("test Failed so jump")
+			return
+		}
+	}
 	if key, ok := kargs["find"]; ok {
 		s.Find(key.(string)).Each(func(i int, sb *goquery.Selection) {
 			if attrs, ok := kargs["attrs"]; ok {
@@ -118,6 +125,20 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 					}
 
 				})
+			// case "if":
+			// 	Ok := false
+			// 	if _, ok := kargs["find"]; ok {
+			// 		WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
+			// 			if strings.Contains(sb.Text(), id) {
+			// 				Ok = true
+			// 			}
+			// 		})
+			// 	} else {
+			// 		if strings.Contains(s.Text(), id) {
+			// 			Ok = true
+			// 		}
+			// 	}
+			// 	res.Bool = Ok
 			case "back":
 				res.Err = self.driver.Back()
 				self.Sleep()
