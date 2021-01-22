@@ -1,4 +1,0 @@
-get: https://dbdc2019.sedns.cn:13431/login.html
-input: name="hzadmin", password="c!$Q300iwpuK"
-wait : change= "url", sleep=30
-save: cookie.txt , cookie="true"

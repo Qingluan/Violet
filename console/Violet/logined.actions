@@ -1,3 +1,0 @@
-get: https://dbdc2019.sedns.cn:13431/
-load: cookie.txt
-wait: sleep=10

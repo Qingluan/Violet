@@ -1,3 +1,4 @@
 *.exe
 example/testyello/testyello
 console/Violet/Violet
+*.actions
