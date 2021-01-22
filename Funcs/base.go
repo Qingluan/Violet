@@ -1,17 +1,14 @@
 package Funcs
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/alyu/configparser"
 	"github.com/fatih/color"
 	"github.com/tebeka/selenium"
@@ -85,6 +82,7 @@ var (
 	Green           = color.New(color.FgGreen).SprintFunc()
 	Bold            = color.New(color.Bold).SprintFunc()
 	Red             = color.New(color.FgRed).SprintFunc()
+	Yellow          = color.New(color.FgYellow).SprintFunc()
 	DefaultConfPath = *flag.String("conf", "conf.ini", "default conf path")
 	MODE_FLOW       = 0
 	MODE_FOR        = 1
@@ -168,152 +166,95 @@ func (self *BaseBrowser) Close() error {
 }
 
 func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err error) {
+
 	if strings.HasPrefix(id, "/") {
 		ele, err = self.driver.FindElement(selenium.ByXPATH, id)
+	} else if strings.Contains("~", id) {
+		if strings.Contains(id, "'") || strings.Contains(id, "\"") {
+			text := strings.ReplaceAll(id[1:], "'", "")
+			text = strings.ReplaceAll(text, "\"", "")
+			ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
+		} else {
+			ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), \"%s\")]", id[1:]))
+
+		}
+	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
+		text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", text))
+	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
+		text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", text))
 	} else {
+		text := strings.ReplaceAll(id, " ", "&nsp;")
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", text))
+	}
+
+	if err != nil {
+		L("warn try cssselector", err.Error())
 		ele, err = self.driver.FindElement(selenium.ByCSSSelector, id)
 	}
 	return
 }
 
 func (self *BaseBrowser) SmartFindEles(id string) (ele []selenium.WebElement, err error) {
+	id = strings.TrimSpace(id)
 	if strings.HasPrefix(id, "/") {
 		ele, err = self.driver.FindElements(selenium.ByXPATH, id)
+	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
+		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
+		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else {
+		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
+	}
+
+	if err != nil || len(ele) == 0 {
 		ele, err = self.driver.FindElements(selenium.ByCSSSelector, id)
 	}
 	return
 }
 
 func L(action string, args ...interface{}) {
-	e := color.New(color.FgGreen, color.Bold).SprintFunc()
-	pre := e("[" + action + "]")
+	// e := color.New(color.FgGreen, color.Bold).SprintFunc()
+	pre := Green("[" + action + "]")
 	// log.Println(args...)
-
-	log.Printf("[%s] : %v", pre, args)
-}
-
-func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) string {
-	ss := make(map[string]string)
-	ss["text"] = s.Text()
-	ss["html"], _ = s.Html()
-	for _, k := range key {
-		ss[k] = s.AttrOr(k, "")
-	}
-	res, _ := json.Marshal(&ss)
-	return string(res)
-}
-
-func (self *BaseBrowser) ActionEle(id string, page []byte, stacks [][]string) (res Result) {
-	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer(page))
-	if err != nil {
-		res.Err = err
-		return
-	}
-	doc.Find(id).Each(func(i int, s *goquery.Selection) {
-		for _, args := range stacks {
-			argc := len(args)
-			if argc < 2 {
-				continue
+	msg := ""
+	for _, v := range args {
+		switch v.(type) {
+		case []string:
+			msg += Yellow("list:\n") + "[\n\t" + strings.Join(v.([]string), ",\n\t") + "\n]"
+		case Dict:
+			// e, _ := json.Marshal(v.(Dict))
+			msg += Yellow("\ndict:\n")
+			for k, v := range v.(Dict) {
+				msg += fmt.Sprintf("%s : %v\n", k, v)
 			}
-			// id := args[1]
-			main := args[0]
+			// msg += string(e)
+		default:
+			msg += fmt.Sprint(v) + " "
 
-			switch main {
-			case "save":
-				switch argc {
-				case 1:
-					fp, err := os.OpenFile(args[1], os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
-					if err != nil {
-						res.Err = err
-						return
-					}
-					defer fp.Close()
-					_, res.Err = fp.WriteString(self.EleToJsonString(s, args[1:]...) + "\n")
-					// for _, ele := range eles {
-					// 	_, res.Err = fp.WriteString(ele.Text())
-					// }
-				}
-			case "print":
-				L("show", self.EleToJsonString(s, args[1:]...))
-			case "find":
-				s.Find(args[1]).Each(func(i int, s *goquery.Selection) {
-					L("find", args[1], s.Text())
-				})
-			}
 		}
-	})
 
-	return
-}
-
-func (self *BaseBrowser) oneLine(no int, ifInCondition bool, args []string) (ifJUmp bool, result Result) {
-
-	argc := len(args)
-	if argc == 0 {
-		return
 	}
-	main := args[0]
-	if ifInCondition {
-		if main == "end" {
-			return
-		}
-	}
-	if main == "" {
-		L("All is Empty")
-		return
-	}
-	if argc > 2 {
-		result = self.Action(args[1], main, args[2:]...)
-	} else if argc > 1 {
-		result = self.Action(args[1], main)
-	} else {
-		result = self.Action("", main)
-	}
-	if main == "if" {
-		if result.Err != nil {
-			ifJUmp = true
-		}
-	}
-
-	return
+	log.Printf("%s : %v\n", pre, msg)
 }
 
 func (self *BaseBrowser) ConsoleLog(result Result) {
 	if result.Err != nil {
 		if result.Err != nil && !strings.Contains(result.Err.Error(), "Timed out receiving message from renderer") {
 			// log.Println(no, action, result.Err)
-			log.Println(color.New(color.FgHiRed).SprintFunc()("[ENDFOR]"), ":", result.Err)
+			log.Println(color.New(color.FgHiRed).SprintFunc()("[Err]"), ":", result.Err)
 			self.switchMode()
 		}
 
 		// break
 	} else {
-		log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, "---------------------------------------"))
-	}
-}
+		if result.Text == "" && !result.Bool && result.Int == 0 {
 
-func (self *BaseBrowser) RunForStack() {
-	self.loopNow = 0
-	// var last Result
-	for {
-		subjump := false
-		for subno, subargs := range self.forstack {
-			subjump, _ = self.oneLine(subno, subjump, subargs)
-		}
-		_, last := self.oneLine(-1, false, self.forLoopTestArgs)
-		if self.loopCount != 0 && self.loopNow >= self.loopCount {
-			log.Println("[ENDFOR]:", last.Err)
-			self.switchMode()
-			break
 		} else {
-			if last.Bool {
-				self.switchMode()
-				break
-			}
+			log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, "Bool:", result.Bool, "Int:", result.Int, "---------------------------------------"))
+
 		}
-		self.ConsoleLog(last)
-		self.loopNow++
 	}
 }
 
@@ -324,22 +265,6 @@ func (self *BaseBrowser) ExecuteByFile(template string) (err error) {
 	}
 	self.Parse(string(buf))
 	// defer fp.Close()
-	return
-}
-
-func splitArgsTrim(raw string) (as []string) {
-	for _, w := range strings.SplitN(raw, ":", 2) {
-		as = append(as, strings.TrimSpace(w))
-	}
-	if len(as) > 1 {
-		if strings.Contains(as[1], ":") {
-			argsStr := as[1]
-			as = []string{as[0]}
-			for _, w2 := range strings.Split(argsStr, ",") {
-				as = append(as, strings.TrimSpace(w2))
-			}
-		}
-	}
 	return
 }
 
@@ -354,7 +279,13 @@ func (self *BaseBrowser) switchMode(modes ...int) {
 		self.forLoopTestArgs = []string{}
 		self.TmpID = ""
 		self.TmpPage = ""
+		self.loopNow = 0
+
 	}
 	self.Mode = ac
 
+}
+
+func (self *BaseBrowser) Sleep() {
+	time.Sleep(time.Duration(self.PageLoadTime) * time.Second)
 }

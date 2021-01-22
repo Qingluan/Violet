@@ -1,10 +1,29 @@
 get:https://cn.cgp640.xyz/hd?fr=loginok
+click: "登录/注册"
+input: name = "349087428" , password= "gyfsIj-5xemte-rinjaw" , end="\n"
+click: ~"登"
+#click: "登  录"
+each: div.video
+    click
+    back
+    save: test.json , find= "a", attrs = ["href", "href"]
+end
+click:最后一页 »
 
-for:4
-#//a[text() = '下一页 ›']
-    click://a[text() = '下一页 ›']
-    sleep: 1
-endfor
+
+
+for: '下一页 ›'
+    
+    click:'下一页 ›'
+    scroll
+    wait: div.video, sleep = 1
+    each: div.video
+        save: test.json , find= "a", attrs = ["href"]
+        click
+        back
+    end
+    
+end
 
 js: alert("hello world");
-sleep:100
+wait: sleep = 100
