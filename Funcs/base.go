@@ -48,8 +48,8 @@ actions:
 	js :
 		# execute js
 		js:  alert(some)
-
 */
+
 type BaseBrowser struct {
 	Name            string `json:"name"`
 	Path            string `json:"path"`
@@ -81,11 +81,15 @@ type Result struct {
 
 var (
 	Green = color.New(color.FgGreen).SprintFunc()
+	Cyanb = color.New(color.FgWhite, color.BgCyan).SprintFunc()
+	Greenb = color.New(color.FgBlack,color.BgGreen).SprintFunc()
+	Blueb  = color.New(color.FgHiWhite, color.BgBlue).SprintFunc()
 	Blue  = color.New(color.FgBlue).SprintFunc()
 
 	Bold            = color.New(color.Bold).SprintFunc()
 	Red             = color.New(color.FgRed).SprintFunc()
 	Yellow          = color.New(color.FgYellow).SprintFunc()
+	Yellowb          = color.New(color.BgYellow).SprintFunc()
 	DefaultConfPath = *flag.String("conf", "conf.ini", "default conf path")
 
 	MODE_FLOW     = 0

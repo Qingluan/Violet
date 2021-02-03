@@ -12,6 +12,7 @@ var (
 	temp                  string
 	showDoc               = false
 	IsGenerateDefaultConf = false
+	cli                   = false
 )
 
 func main() {
@@ -20,6 +21,7 @@ func main() {
 	flag.StringVar(&temp, "action", "run.vio", "actions list file")
 	flag.BoolVar(&IsGenerateDefaultConf, "init", false, "generate default conf path")
 	flag.BoolVar(&showDoc, "doc", false, "show help")
+	flag.BoolVar(&cli, "cli", false, "show help")
 
 	flag.Parse()
 	// Violet.New
@@ -49,5 +51,56 @@ func main() {
 		log.Fatal(err)
 	}
 	defer browser.Close()
-	browser.ExecuteByFile(temp)
+	if cli {
+		mode := ""
+		pre := " >"
+		Docss := Funcs.Datas{
+			"repl": "this mode can repl mode",
+			"load": "run a bundle actinos in a file.",
+			"exit": "exit ",
+		}
+		choices := ""
+		for {
+			browser.Clear()
+			choices = Funcs.Tui.Input(mode+pre, Docss)
+			if choices == "exit" {
+				break
+			}
+			if choices == "repl" {
+				mode = "repl"
+				Docss = Funcs.Datas{
+					"exit": "exit this mode to back mode",
+				}
+				for k, v := range Funcs.Docs {
+					switch v.(type) {
+					case map[string]string:
+						ss := ""
+						for subk, subv := range v.(map[string]string) {
+							ss += fmt.Sprintln(subk, ":", subv)
+						}
+						Docss[k] = ss
+					default:
+						Docss[k] = fmt.Sprintf("%v", v)
+					}
+				}
+				for {
+					browser.Clear()
+					choices = Funcs.Tui.Input(mode+pre, Docss)
+					if choices == "exit" {
+						break
+					}
+					browser.Parse(choices)
+
+				}
+
+			} else {
+				file := Funcs.Tui.InputSmartPath(".")
+				browser.ExecuteByFile(file)
+
+			}
+		}
+	} else {
+		browser.ExecuteByFile(temp)
+
+	}
 }

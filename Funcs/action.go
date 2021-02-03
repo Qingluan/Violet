@@ -25,13 +25,16 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	for range self.OperStack {
 		pre += "\t"
 	}
-	printmsg := Green(pre+"["+action+"]") + Blue(fmt.Sprintf("(id: %s)", id))
+	printmsg := Greenb(pre+"["+action+"]") + Blueb(fmt.Sprintf(" (id: %s)", id))
 	if len(args) != 0 {
-		printmsg += fmt.Sprintf("Args:%v ", args)
+		printmsg += Cyanb(strings.ReplaceAll(fmt.Sprintf("Args: %v ", args), "\n", ""))
 	}
 	if len(kargs) != 0 {
-		m, _ := json.Marshal(kargs)
-		printmsg += strings.ReplaceAll(fmt.Sprintf("Args:\n%s", string(m)), "\n", "\n    ")
+		printmsg += "\n"
+		for k, v := range kargs {
+			printmsg += Yellow(fmt.Sprintf("  %s: %v", k, v))
+		}
+
 	}
 	fmt.Println(printmsg)
 	// }()
@@ -423,16 +426,29 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		} else {
 			return
 		}
-		// if args != nil {
-		// 	res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
-		// } else {
-		// 	res.Text, res.Err = ele.Text()
-		// }
-		// if res.Err == nil {
-		// 	res.Err = nil
-		// 	res.Bool = true
-		// 	// return
-		// }
+	// if args != nil {
+	// 	res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
+	// } else {
+	// 	res.Text, res.Err = ele.Text()
+	// }
+	// if res.Err == nil {
+	// 	res.Err = nil
+	// 	res.Bool = true
+	// 	// return
+	// }
+	case "print":
+		var ele selenium.WebElement
+		ele, res.Err = self.SmartFindEle(id)
+		if res.Err != nil {
+
+			return
+		}
+		var tag string
+		var text string
+		tag, res.Err = ele.TagName()
+		text, res.Err = ele.Text()
+		L("Show", tag, text)
+
 	default:
 		res.Err = fmt.Errorf("illegal code action:%s  args:%v", action, args)
 		// var ele selenium.WebElement

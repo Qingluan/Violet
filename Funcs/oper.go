@@ -136,6 +136,13 @@ func (self *BaseBrowser) StepRun() (result Result) {
 	return
 }
 
+func (self *BaseBrowser) Clear() {
+	self.lines = []string{}
+	// linenum := 0
+	// var last Result
+	self.NextLine = 0
+}
+
 func (self *BaseBrowser) Parse(actions string) {
 	self.lines = strings.Split(actions, "\n")
 	linenum := len(self.lines)
