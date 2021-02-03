@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,7 +25,15 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	for range self.OperStack {
 		pre += "\t"
 	}
-	log.Println(Green(pre+"["+action+"]"), id, args, kargs)
+	printmsg := Green(pre+"["+action+"]") + Blue(fmt.Sprintf("(id: %s)", id))
+	if len(args) != 0 {
+		printmsg += fmt.Sprintf("Args:%v ", args)
+	}
+	if len(kargs) != 0 {
+		m, _ := json.Marshal(kargs)
+		printmsg += strings.ReplaceAll(fmt.Sprintf("Args:\n%s", string(m)), "\n", "\n    ")
+	}
+	fmt.Println(printmsg)
 	// }()
 	if !strings.HasPrefix(action, "#") {
 		defer time.Sleep(2 * time.Second)
@@ -35,7 +42,14 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	switch action {
 	case "get":
 		if args != nil {
-			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
+			if timeout, ok := kargs["timeout"]; ok {
+				t, _ := strconv.Atoi(timeout.(string))
+				L("set timeout =>", t)
+				self.driver.SetPageLoadTimeout(time.Second * time.Duration(t))
+			} else {
+				self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
+
+			}
 			self.driver.Get(strings.TrimSpace(args[0]))
 			// res.Text, res.Err = self.driver.PageSource()
 			// if res.Err != nil {
@@ -128,7 +142,10 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				self.Sleep()
 				if end, ok := kargs["end"]; ok {
 					switch end.(string) {
-					case "\n":
+					case "\t":
+						ele.SendKeys(selenium.TabKey)
+
+					default:
 						ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/*[@type=\"submit\"]")
 						if res.Err != nil {
 							return
@@ -139,8 +156,6 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 							L("Submit -- >", pwd.(string))
 							ele.Click()
 						}
-					case "\t":
-						ele.SendKeys(selenium.TabKey)
 					}
 				}
 			}
@@ -165,7 +180,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 
 	case "wait":
 		sleep := 10
-		if tk, ok := kargs["sleep"]; ok {
+		if tk, ok := kargs["timeout"]; ok {
 			sleep, res.Err = strconv.Atoi(tk.(string))
 			if res.Err != nil {
 				return
@@ -195,14 +210,14 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				}
 
 			} else {
-				if util, ok := kargs["change"]; ok {
-					if util.(string) == "url" {
-						// L("Wait Url Change", "timeout:", sleep)
-						thisURL, _ := self.driver.CurrentURL()
-						if thisURL != lastURL {
-							break
-						}
+				if _, ok := kargs["change"]; ok {
+					// if util.(string) == "url" {
+					// L("Wait Url Change", "timeout:", sleep)
+					thisURL, _ := self.driver.CurrentURL()
+					if thisURL != lastURL {
+						break
 					}
+					// }
 				}
 			}
 			if time.Now().After(timeout) {
@@ -243,12 +258,14 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			}
 			cookies, err := parseCookie(cookie.(string), urlObj.Host)
 			self.driver.DeleteAllCookies()
+			cookieStr := ""
 			for _, c := range cookies {
 
-				err := self.driver.AddCookie(c)
-				if err != nil {
-					L("----- Add Cookie err ----", Yellow(err))
-				}
+				// err := self.driver.AddCookie(c)
+				cookieStr += fmt.Sprintf("%s=%s; ", c.Name, c.Value)
+				// if err != nil {
+				// 	L("----- Add Cookie err ----", Yellow(err))
+				// }
 				L("---- Add Cookie ----", c.Name, " : ", c.Value, " in :", c.Domain)
 			}
 			self.driver.ExecuteScriptRaw("alert(document.cookie)", nil)
@@ -274,7 +291,15 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", p.Y), nil)
 			self.Sleep()
 		} else {
-			self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
+			if f, ok := kargs["offset"]; ok {
+				moveOffset, _ := strconv.Atoi(f.(string))
+				self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", moveOffset), nil)
+				self.Sleep()
+
+			} else {
+				self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
+
+			}
 		}
 	case "js":
 		if args != nil {

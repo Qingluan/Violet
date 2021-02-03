@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/tebeka/selenium"
@@ -65,9 +66,9 @@ func isKargs(raw string) (ok bool) {
 	if strings.Contains(w2, "=") {
 
 		if !strings.HasPrefix(w2, "\"") && !strings.HasPrefix(w2, "'") {
-			// L("l1", w2)
+			// L("l1", w2, raw)
 			if strings.HasSuffix(w2, "\"") || strings.HasSuffix(w2, "\"") {
-				// L("l2", w2)
+				// L("l2", w2, raw)
 
 				if strings.Count(w2, "'")%2 == 0 || strings.Count(w2, "\"")%2 == 0 {
 
@@ -83,6 +84,11 @@ func isKargs(raw string) (ok bool) {
 				}
 				// L("isKargs", w2)
 				// ok = true
+			} else {
+				if _, err := strconv.Atoi(strings.TrimSpace(strings.SplitN(w2, "=", 2)[1])); err == nil {
+					ok = true
+				}
+
 			}
 		}
 	}

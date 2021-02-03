@@ -62,6 +62,7 @@ type BaseBrowser struct {
 	loopNow         int
 	TmpPage         string
 	TmpID           string
+	Proxy           string
 	driver          selenium.WebDriver
 	tmpEles         []selenium.WebElement
 	service         *selenium.Service
@@ -79,7 +80,9 @@ type Result struct {
 }
 
 var (
-	Green           = color.New(color.FgGreen).SprintFunc()
+	Green = color.New(color.FgGreen).SprintFunc()
+	Blue  = color.New(color.FgBlue).SprintFunc()
+
 	Bold            = color.New(color.Bold).SprintFunc()
 	Red             = color.New(color.FgRed).SprintFunc()
 	Yellow          = color.New(color.FgYellow).SprintFunc()
@@ -122,6 +125,7 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 	browser = new(BaseBrowser)
 	browser.Name = b.ValueOf("browser")
 	browser.Path = b.ValueOf("path")
+	browser.Proxy = b.ValueOf("proxy")
 	ti := b.ValueOf("timeout")
 	i, _ := strconv.Atoi(ti)
 	browser.PageLoadTime = i
@@ -143,6 +147,7 @@ func (self *BaseBrowser) Init() error {
 			"--ignore-certificate-errors",
 			"--log-level=0", // INFO = 0, WARNING = 1, LOG_ERROR = 2, LOG_FATAL = 3
 			"--no-sandbox",
+			"--proxy-server=socks5://localhost:1091",
 			"--window-size=1024x768",
 		},
 		// "phantomjs.binary.path": self.Path, // path to binary from http://phantomjs.org/
@@ -157,7 +162,46 @@ func (self *BaseBrowser) Init() error {
 			return err
 		}
 		self.driver = driver
+		if self.Proxy != "" {
+			L("Use Proxy:", self.Proxy)
+			if strings.HasPrefix(self.Proxy, "socks5://") {
+				p := strings.TrimLeft(self.Proxy, "socks5://")
+				hostFields := strings.SplitN(p, ":", 2)
+				port, err := strconv.Atoi(hostFields[1])
+				if err != nil {
+					log.Fatal("Port Err:", err)
+				}
+				caps.AddProxy(selenium.Proxy{
+					Type:         selenium.Manual,
+					SOCKS:        hostFields[0],
+					SocksPort:    port,
+					SOCKSVersion: 5,
+				})
+			} else {
+				log.Fatal("Only support proxy : socks5://ip:port")
+			}
+		}
 	default:
+		if self.Proxy != "" {
+
+			if strings.HasPrefix(self.Proxy, "socks5://") {
+				p := strings.TrimLeft(self.Proxy, "socks5://")
+				hostFields := strings.SplitN(p, ":", 2)
+				port2, err := strconv.Atoi(hostFields[1])
+				if err != nil {
+					log.Fatal("Port Err:", err)
+				}
+				caps.AddProxy(selenium.Proxy{
+					Type:         selenium.Manual,
+					SOCKS:        p,
+					SOCKSVersion: 5,
+				})
+
+				L("Use Proxy:", hostFields[0], port2)
+			} else {
+				log.Fatal("Only support proxy : socks5://ip:port")
+			}
+		}
 		// caps := chrome.Capabilities{
 		// 	Args: []string{ // https://peter.sh/experiments/chromium-command-line-switches/
 		// 		"--disable-gpu",
@@ -170,6 +214,7 @@ func (self *BaseBrowser) Init() error {
 		// 	},
 		// }
 		// }
+
 		service, err := selenium.NewChromeDriverService(self.Path, port, ops...)
 		if err != nil {
 			return err
@@ -177,8 +222,9 @@ func (self *BaseBrowser) Init() error {
 		self.service = service
 
 		// driver, err := selenium.NewRemote(caps, "")
-
+		caps.SetLogLevel("browser", "ALL")
 		driver, err := selenium.NewRemote(caps, "http://127.0.0.1:9515/wd/hub")
+
 		if err != nil {
 			return err
 		}
@@ -198,15 +244,15 @@ func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err e
 
 	if strings.HasPrefix(id, "/") {
 		ele, err = self.driver.FindElement(selenium.ByXPATH, id)
-	} else if strings.Contains("~", id) {
-		if strings.Contains(id, "'") || strings.Contains(id, "\"") {
-			text := strings.ReplaceAll(id[1:], "'", "")
-			text = strings.ReplaceAll(text, "\"", "")
-			ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
-		} else {
-			ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), \"%s\")]", id[1:]))
+	} else if strings.HasPrefix("~", id) {
+		// if strings.Contains(id, "'") || strings.Contains(id, "\"") {
+		// 	text := strings.ReplaceAll(id[1:], "'", "")
+		// 	text = strings.ReplaceAll(text, "\"", "")
+		// 	ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
+		// } else {
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), \"%s\")]", id[1:]))
 
-		}
+		// }
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
@@ -219,7 +265,7 @@ func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err e
 	}
 
 	if err != nil {
-		L("warn try cssselector", err.Error())
+		// L("warn try cssselector", err.Error())
 		ele, err = self.driver.FindElement(selenium.ByCSSSelector, id)
 	}
 	return
@@ -281,7 +327,7 @@ func (self *BaseBrowser) ConsoleLog(result Result) {
 		if result.Text == "" && !result.Bool && result.Int == 0 {
 
 		} else {
-			log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, "Bool:", result.Bool, "Int:", result.Int, "---------------------------------------"))
+			log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, " Bool:", result.Bool, " Int:", result.Int, "---------------------------------------"))
 
 		}
 	}
