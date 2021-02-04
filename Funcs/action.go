@@ -50,8 +50,9 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				L("set timeout =>", t)
 				self.driver.SetPageLoadTimeout(time.Second * time.Duration(t))
 			} else {
-				self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
-
+				if self.PageLoadTime > 0 {
+					self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
+				}
 			}
 			self.driver.Get(strings.TrimSpace(args[0]))
 			// res.Text, res.Err = self.driver.PageSource()
@@ -247,6 +248,11 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			res.Err = self.driver.Get(strings.TrimSpace(newurl.(string)))
 
 		}
+		if header, ok := kargs["header"]; ok {
+			if strings.Contains(header.(string), "=") {
+				// self.driver.AddCookie()
+			}
+		}
 
 		if cookie, ok := kargs["cookie"]; ok {
 			u, err := self.driver.CurrentURL()
@@ -260,18 +266,18 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				return
 			}
 			cookies, err := parseCookie(cookie.(string), urlObj.Host)
-			self.driver.DeleteAllCookies()
-			cookieStr := ""
+			// self.driver.DeleteAllCookies()
+			// cookieStr := ""
 			for _, c := range cookies {
 
 				// err := self.driver.AddCookie(c)
-				cookieStr += fmt.Sprintf("%s=%s; ", c.Name, c.Value)
+				// cookieStr += fmt.Sprintf("%s=%s; ", c.Name, c.Value)
 				// if err != nil {
 				// 	L("----- Add Cookie err ----", Yellow(err))
 				// }
 				L("---- Add Cookie ----", c.Name, " : ", c.Value, " in :", c.Domain)
 			}
-			self.driver.ExecuteScriptRaw("alert(document.cookie)", nil)
+			self.driver.ExecuteScriptRaw(fmt.Sprintf("document.cookie=\"%s\"", cookie.(string)), nil)
 			self.driver.Refresh()
 		}
 		// if header, ok := kargs[""]
@@ -305,12 +311,16 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			}
 		}
 	case "js":
+		var resOut interface{}
 		if args != nil {
-			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(args[0]), nil)
+			resOut, res.Err = self.driver.ExecuteScript(strings.TrimSpace(args[0]), nil)
 		} else if strings.TrimSpace(id) != "" {
-			_, res.Err = self.driver.ExecuteScript(strings.TrimSpace(id), nil)
+			resOut, res.Err = self.driver.ExecuteScript(strings.TrimSpace(id), nil)
 		} else {
 			res.Err = fmt.Errorf("no args to execute js")
+		}
+		if resOut != nil {
+			L("Js Out:", resOut)
 		}
 	case "save":
 		if id == "" {
@@ -437,17 +447,54 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	// 	// return
 	// }
 	case "print":
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
-		if res.Err != nil {
 
+		if _, ok := kargs["all"]; ok {
+			res.Text, _ = self.driver.PageSource()
+			res.Text = removeScriptAndCss(res.Text)
 			return
 		}
-		var tag string
-		var text string
-		tag, res.Err = ele.TagName()
-		text, res.Err = ele.Text()
-		L("Show", tag, text)
+		if _, ok := kargs["cookie"]; ok {
+			cookies, err := self.driver.GetCookies()
+			if err != nil {
+				res.Err = err
+				return
+			}
+			for _, cookie := range cookies {
+				if cookie.Domain == self.CurrentDomain() {
+					res.Text += fmt.Sprintf("\n%s:%s", cookie.Name, cookie.Value)
+				}
+			}
+			// for _, header := range self.driver.
+			return
+		}
+		var ele selenium.WebElement
+		ele, res.Err = self.SmartFindEle(id, true)
+		if res.Err != nil {
+			L("err", res.Err)
+			return
+		}
+		if ele == nil {
+			return
+		}
+		// L("Found Ele:", ele)
+		if _, ok := kargs["text"]; ok {
+			res.Text, res.Err = ele.Text()
+			return
+		}
+
+		if _, ok := kargs["in"]; ok {
+
+			res.Text, res.Err = ele.GetAttribute("innerHTML")
+
+		} else {
+			res.Text, res.Err = ele.GetAttribute("outerHTML")
+
+		}
+		// var tag string
+		// var text string
+		// tag, res.Err = ele.TagName()
+		// text, res.Err = ele.Text()
+		// L("Show", attr)
 
 	default:
 		res.Err = fmt.Errorf("illegal code action:%s  args:%v", action, args)

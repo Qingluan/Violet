@@ -3,8 +3,11 @@ package Funcs
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -64,8 +67,10 @@ type BaseBrowser struct {
 	TmpID           string
 	Proxy           string
 	driver          selenium.WebDriver
+	loger           io.WriteCloser
+	log             string
 	tmpEles         []selenium.WebElement
-	service         *selenium.Service
+	service         CloserService
 	OperStack       []Stack
 	// OperStackWhere  [][]int
 	// OperNow         string
@@ -79,17 +84,22 @@ type Result struct {
 	Bool   bool   `json:"bool"`
 }
 
+type CloserService interface {
+	Stop() error
+}
+
 var (
-	Green = color.New(color.FgGreen).SprintFunc()
-	Cyanb = color.New(color.FgWhite, color.BgCyan).SprintFunc()
-	Greenb = color.New(color.FgBlack,color.BgGreen).SprintFunc()
+	Green  = color.New(color.FgGreen).SprintFunc()
+	Cyanb  = color.New(color.FgWhite, color.BgCyan).SprintFunc()
+	Cyan   = color.New(color.FgCyan).SprintFunc()
+	Greenb = color.New(color.FgBlack, color.BgGreen).SprintFunc()
 	Blueb  = color.New(color.FgHiWhite, color.BgBlue).SprintFunc()
-	Blue  = color.New(color.FgBlue).SprintFunc()
+	Blue   = color.New(color.FgBlue).SprintFunc()
 
 	Bold            = color.New(color.Bold).SprintFunc()
 	Red             = color.New(color.FgRed).SprintFunc()
 	Yellow          = color.New(color.FgYellow).SprintFunc()
-	Yellowb          = color.New(color.BgYellow).SprintFunc()
+	Yellowb         = color.New(color.BgYellow).SprintFunc()
 	DefaultConfPath = *flag.String("conf", "conf.ini", "default conf path")
 
 	MODE_FLOW     = 0
@@ -130,6 +140,7 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 	browser.Name = b.ValueOf("browser")
 	browser.Path = b.ValueOf("path")
 	browser.Proxy = b.ValueOf("proxy")
+	browser.log = b.ValueOf("log")
 	ti := b.ValueOf("timeout")
 	i, _ := strconv.Atoi(ti)
 	browser.PageLoadTime = i
@@ -141,9 +152,48 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 func (self *BaseBrowser) Init() error {
 	ops := []selenium.ServiceOption{}
 	caps := selenium.Capabilities{
-		"browserName":         self.Name, // "chrome", or any other
-		"acceptInsecureCerts": true,
-		"args": []string{
+		"browserName": self.Name, // "chrome", or any other
+
+		// "phantomjs.binary.path": self.Path, // path to binary from http://phantomjs.org/
+	}
+	prefixURL := fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
+	switch self.Name {
+	case "phantomjs":
+
+		caps["phantomjs.binary.path"] = self.Path
+		caps["phantomjs.page.settings.userAgent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.3"
+		// selenium.SetDebug(true)
+		if self.Proxy != "" {
+			L("Use Proxy:", self.Proxy)
+		}
+		// if sys.
+
+		prefixURL := fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port+1)
+		var err error
+		if self.log != "" {
+			self.loger, err = os.OpenFile(self.log, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
+			if err != nil {
+				return err
+			}
+		}
+		service, err := self.PhantomJSService(port+1, self.Proxy)
+		if err != nil {
+			panic(err)
+		}
+		self.service = service
+		L("connected ", prefixURL)
+		driver, err := selenium.NewRemote(caps, prefixURL)
+		if err != nil {
+			log.Fatal(err)
+			// driver.Get("https://www.google.com")
+			// return err
+		}
+		// self.driver.
+		self.driver = driver
+
+	default:
+		caps["acceptInsecureCerts"] = true
+		caps["args"] = []string{
 			//https://peter.sh/experiments/chromium-command-line-switches/
 			"--disable-gpu",
 			"--disable-web-security",
@@ -151,41 +201,8 @@ func (self *BaseBrowser) Init() error {
 			"--ignore-certificate-errors",
 			"--log-level=0", // INFO = 0, WARNING = 1, LOG_ERROR = 2, LOG_FATAL = 3
 			"--no-sandbox",
-			"--proxy-server=socks5://localhost:1091",
 			"--window-size=1024x768",
-		},
-		// "phantomjs.binary.path": self.Path, // path to binary from http://phantomjs.org/
-	}
-
-	switch self.Name {
-	case "phantomjs":
-		caps["phantomjs.binary.path"] = self.Path
-		// path to binary from http://phantomjs.org/
-		driver, err := selenium.NewRemote(caps, "")
-		if err != nil {
-			return err
 		}
-		self.driver = driver
-		if self.Proxy != "" {
-			L("Use Proxy:", self.Proxy)
-			if strings.HasPrefix(self.Proxy, "socks5://") {
-				p := strings.TrimLeft(self.Proxy, "socks5://")
-				hostFields := strings.SplitN(p, ":", 2)
-				port, err := strconv.Atoi(hostFields[1])
-				if err != nil {
-					log.Fatal("Port Err:", err)
-				}
-				caps.AddProxy(selenium.Proxy{
-					Type:         selenium.Manual,
-					SOCKS:        hostFields[0],
-					SocksPort:    port,
-					SOCKSVersion: 5,
-				})
-			} else {
-				log.Fatal("Only support proxy : socks5://ip:port")
-			}
-		}
-	default:
 		if self.Proxy != "" {
 
 			if strings.HasPrefix(self.Proxy, "socks5://") {
@@ -227,7 +244,7 @@ func (self *BaseBrowser) Init() error {
 
 		// driver, err := selenium.NewRemote(caps, "")
 		caps.SetLogLevel("browser", "ALL")
-		driver, err := selenium.NewRemote(caps, "http://127.0.0.1:9515/wd/hub")
+		driver, err := selenium.NewRemote(caps, prefixURL)
 
 		if err != nil {
 			return err
@@ -241,37 +258,71 @@ func (self *BaseBrowser) Close() error {
 	if err := self.driver.Quit(); err != nil {
 		return err
 	}
-	return self.service.Stop()
+	if self.service != nil {
+		return self.service.Stop()
+	}
+	return nil
+
 }
 
-func (self *BaseBrowser) SmartFindEle(id string) (ele selenium.WebElement, err error) {
+func (self *BaseBrowser) CurrentDomain() string {
+	u, _ := self.driver.CurrentURL()
+	uu, _ := url.Parse(u)
+	return uu.Host
+}
+
+// SmartFindEle, can use xpath, cssselector
+func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele selenium.WebElement, err error) {
 
 	if strings.HasPrefix(id, "/") {
+
+		L("Xpath Match", id[1:])
 		ele, err = self.driver.FindElement(selenium.ByXPATH, id)
-	} else if strings.HasPrefix("~", id) {
+	} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
 		// if strings.Contains(id, "'") || strings.Contains(id, "\"") {
 		// 	text := strings.ReplaceAll(id[1:], "'", "")
 		// 	text = strings.ReplaceAll(text, "\"", "")
 		// 	ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
 		// } else {
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), \"%s\")]", id[1:]))
+		L("Fuzy Match", id[1:])
+		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
 
 		// }
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
+		L("Xpath Text Match", id)
+
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
+		L("Xpath Text Match", id)
+
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else {
+		L("Xpath Text Match", id)
+
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
 	}
 
 	if err != nil {
+		L("Css Text Match", id)
+
 		// L("warn try cssselector", err.Error())
 		ele, err = self.driver.FindElement(selenium.ByCSSSelector, id)
 	}
+
+	return
+}
+
+// SmartFindEle, can use xpath, cssselector
+func (self *BaseBrowser) SmartFindEleSource(id string) (html string, err error) {
+	ele, eerr := self.SmartFindEle(id)
+	if eerr != nil {
+		err = eerr
+		return
+	}
+	html, err = ele.GetAttribute("innerHTML")
 	return
 }
 
@@ -328,12 +379,11 @@ func (self *BaseBrowser) ConsoleLog(result Result) {
 
 		// break
 	} else {
-		if result.Text == "" && !result.Bool && result.Int == 0 {
-
-		} else {
-			log.Println(Green("\t[result:", result.Action, "]"), ":\n", Bold(result.Text, " Bool:", result.Bool, " Int:", result.Int, "---------------------------------------"))
-
+		fmt.Println(Cyan("---------------", Bold(" Bool:", result.Bool, " Int:", result.Int, "---------------------------------------")))
+		if result.Text != "" {
+			fmt.Println(Green(result.Text))
 		}
+
 	}
 }
 

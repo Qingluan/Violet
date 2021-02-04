@@ -14,21 +14,25 @@ type Datas map[string]string
 
 var (
 	Docs = map[string]interface{}{
-		"get":    `*url timeout:int`,
-		"wait":   `[*selector, timeout:int,change=]`,
-		"scroll": `[selector,offset=int] if null will scroll download to bottom `,
-		"save":   `[*filename,cookie=]`,
-		"if":     `[*selector,attr:str,compareStr:str]  test @selector.attr == comparestr `,
-		"for":    `[selector_or_int:str|int ] if selecotr exists or in loop limit .`,
-		"input":  `[*selector: str, name=,password=,end=] , smart input`,
-		"each": map[string]string{
+		"print:":      `*selector, [text="true", cookie="true", all="true", in="true"]`,
+		"load":        `[cookie=str,header=str]`,
+		"get:":        `https://www.,[timeout=int]`,
+		"wait:":       `*selector,[timeout=7,change="true"]`,
+		"scroll:":     `[selector,offset=100]`,
+		"save:":       `*filename, [cookie="True"]`,
+		"savescreen:": `*filename`,
+		"if:":         `*selector,[attrStr,compareStr]`,
+		"for:":        `[selector_or_int]`,
+		"input:":      `[*selector: str, name=,password=,end=] , smart input`,
+		"each:": map[string]string{
 			"save": `[*filename,contains=, find=, attrs= [...]] save node's data to file, in json format`,
 		},
+		"js:": `*jscode in one line`,
 	}
 
 	Tui = struct {
 		Select         func(label string, options ...string) string
-		Input          func(label string, suggest Datas) string
+		Input          func(label string, suggest Datas, dynamic ...func(nowDesc string) Datas) string
 		InputSmartPath func(root ...string) string
 	}{
 		Select: func(label string, options ...string) string {
@@ -48,8 +52,26 @@ var (
 			}
 			return result
 		},
-		Input: func(label string, suggest Datas) string {
+		Input: func(label string, suggest Datas, dyname ...func(nowDesc string) Datas) string {
 			return prompt.Input(label, func(d prompt.Document) (s []prompt.Suggest) {
+				if dyname != nil {
+
+					if now, ok := suggest[strings.TrimSpace(d.CurrentLineBeforeCursor())]; ok {
+
+						if ss := dyname[0](now); len(ss) > 0 {
+							// L("now:", ss)
+							for k, v := range ss {
+								s = append(s, prompt.Suggest{
+									Text:        k,
+									Description: v,
+								})
+							}
+							return prompt.FilterFuzzy(s, d.GetWordBeforeCursor(), true)
+							// fmt.Println(ss)
+						}
+					}
+
+				}
 				for k, v := range suggest {
 					s = append(s, prompt.Suggest{
 						Text:        k,
@@ -91,3 +113,19 @@ var (
 		},
 	}
 )
+
+func SubCompleteByDoc(now string) Datas {
+	if now != "" {
+		newD := make(Datas)
+		now = strings.ReplaceAll(now, "[", "")
+		now = strings.ReplaceAll(now, "]", "")
+		now = strings.ReplaceAll(now, "*", "")
+		for _, field := range strings.Split(now, ",") {
+			newD[field] = "arg complete"
+		}
+		// L("Now:", newD)
+		return newD
+	} else {
+		return nil
+	}
+}

@@ -69,8 +69,10 @@ func main() {
 			if choices == "repl" {
 				mode = "repl"
 				Docss = Funcs.Datas{
-					"exit": "exit this mode to back mode",
+					"exit":         "exit this mode to back mode",
+					"https://www.": " syncbolic",
 				}
+				browser.PageLoadTime = 0
 				for k, v := range Funcs.Docs {
 					switch v.(type) {
 					case map[string]string:
@@ -85,8 +87,9 @@ func main() {
 				}
 				for {
 					browser.Clear()
-					choices = Funcs.Tui.Input(mode+pre, Docss)
+					choices = Funcs.Tui.Input(mode+pre, Docss, Funcs.SubCompleteByDoc)
 					if choices == "exit" {
+						mode = ""
 						break
 					}
 					browser.Parse(choices)

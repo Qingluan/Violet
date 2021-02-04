@@ -4,10 +4,16 @@ import (
 	"encoding/json"
 	"math"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/tebeka/selenium"
+	"golang.org/x/net/html"
+)
+
+var (
+	removeJSRE = regexp.MustCompile(`<script>.+?</script>`)
 )
 
 type Dict map[string]interface{}
@@ -103,6 +109,11 @@ func parseArg(arg string) string {
 	if (strings.HasPrefix(p, "'") && strings.HasSuffix(p, "'")) || (strings.HasPrefix(p, "\"") && strings.HasSuffix(p, "\"")) {
 		return p[1 : len(p)-1]
 	} else {
+		// } else if p == "true" {
+		// 	return true
+		// } else if p == "true" {
+		// 	return false
+		// } else {
 		return p
 	}
 }
@@ -230,4 +241,46 @@ func remove(slice []string, one string) []string {
 	} else {
 		return slice
 	}
+}
+
+func removeScript(n *html.Node) {
+	// if note is script tag
+	if n.Type == html.ElementNode && n.Data == "script" {
+		n.Parent.RemoveChild(n)
+		return // script tag is gone...
+	}
+	if n.Type == html.ElementNode && n.Data == "style" {
+		n.Parent.RemoveChild(n)
+		return // script tag is gone...
+	}
+	// traverse DOM
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		removeScript(c)
+	}
+}
+
+func removeScriptAndCss(raw string) string {
+
+	// func main() {
+	for {
+
+		si := strings.Index(raw, "<style")
+		ei := strings.Index(raw, "</style>")
+		if si > -1 && ei > -1 {
+			raw = raw[:si] + raw[ei:]
+		}
+		si = strings.Index(raw, "<script")
+		ei = strings.Index(raw, "</script>")
+		// fmt.Println(si, ei, "OK")
+		if si > -1 && ei > -1 {
+			raw = raw[:si] + raw[ei:]
+		} else {
+			break
+		}
+
+	}
+
+	return raw
+	// }
+
 }
