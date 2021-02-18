@@ -27,7 +27,8 @@ var (
 		"each:": map[string]string{
 			"save": `[*filename,contains=, find=, attrs= [...]] save node's data to file, in json format`,
 		},
-		"js:": `*jscode in one line`,
+		"js:":     `*jscode in one line`,
+		"export:": ``,
 	}
 
 	Tui = struct {

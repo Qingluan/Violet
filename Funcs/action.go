@@ -1,15 +1,18 @@
 package Funcs
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/tebeka/selenium"
 )
 
@@ -34,7 +37,10 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		for k, v := range kargs {
 			printmsg += Yellow(fmt.Sprintf("  %s: %v", k, v))
 		}
+	}
 
+	if self.PageLoadTime == 0 {
+		self.PageLoadTime = 5
 	}
 	fmt.Println(printmsg)
 	// }()
@@ -54,14 +60,19 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 					self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
 				}
 			}
-			self.driver.Get(strings.TrimSpace(args[0]))
+			fmt.Println("Dos", args)
+			res.Err = self.driver.Get(strings.TrimSpace(args[0]))
 			// res.Text, res.Err = self.driver.PageSource()
 			// if res.Err != nil {
 			// 	return
 			// }
 		} else if strings.HasPrefix(id, "http") {
-			self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
-			self.driver.Get(id)
+
+			fmt.Println("Do", id, self.PageLoadTime)
+			if self.PageLoadTime > 0 {
+				res.Err = self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
+			}
+			res.Err = self.driver.Get(id)
 			// res.Text, res.Err = self.driver.PageSource()
 			// if res.Err != nil {
 			// 	return
@@ -233,6 +244,46 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		res.Err = nil
 	case "refresh":
 		self.driver.Refresh()
+	case "export":
+		spaceA := regexp.MustCompile(`\s+`)
+		html, _ := self.driver.PageSource()
+		// fmt.Println(html)
+		doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer([]byte(html)))
+		if err != nil {
+			res.Err = err
+			return
+		}
+		columns := [][]string{}
+		mins := 9999999
+		for _, arg := range args {
+			column := []string{}
+			doc.Find(strings.TrimSpace(arg)).Each(func(i int, s *goquery.Selection) {
+				text := strings.TrimSpace(s.Text())
+				text = strings.ReplaceAll(text, "\n", "")
+				text = strings.ReplaceAll(text, "\t", " ")
+				text = spaceA.ReplaceAllString(text, " ")
+				column = append(column, text)
+			})
+			if len(column) < mins {
+				mins = len(column)
+			}
+			columns = append(columns, column)
+		}
+		fb, err := os.OpenFile(strings.TrimSpace(id), os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+		defer fb.Close()
+		for i := 0; i < mins; i++ {
+			line := []string{}
+			for _, column := range columns {
+				line = append(line, column[i])
+			}
+			if i < 10 {
+				fmt.Println(Yellow(strings.Join(line, ",")) + "\n")
+			} else if i == 10 {
+				fmt.Println("        ....    ")
+			}
+			fb.WriteString(strings.Join(line, ",") + "\n")
+		}
+
 	case "load":
 		if id != "" {
 			fs, err := ioutil.ReadFile(id)

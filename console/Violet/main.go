@@ -21,7 +21,7 @@ func main() {
 	flag.StringVar(&temp, "action", "run.vio", "actions list file")
 	flag.BoolVar(&IsGenerateDefaultConf, "init", false, "generate default conf path")
 	flag.BoolVar(&showDoc, "doc", false, "show help")
-	flag.BoolVar(&cli, "cli", false, "show help")
+	flag.BoolVar(&cli, "cli", true, "show help")
 
 	flag.Parse()
 	// Violet.New
