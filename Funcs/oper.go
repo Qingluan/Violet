@@ -1,6 +1,9 @@
 package Funcs
 
 import (
+	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 )
 
@@ -147,7 +150,24 @@ func (self *BaseBrowser) Parse(actions string) {
 	self.lines = strings.Split(actions, "\n")
 	linenum := len(self.lines)
 	var last Result
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	ifbreak := false
+	go func() {
+		for sig := range c {
+			// sig is a ^C, handle it
+			if sig.String() == os.Interrupt.String() {
+				ifbreak = true
+			}
+
+		}
+	}()
 	for {
+		if ifbreak {
+			fmt.Println(Yellow("Ctrl-c"))
+			break
+		}
 		if self.NextLine >= linenum {
 			break
 		}
