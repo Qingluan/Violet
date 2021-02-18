@@ -5,3 +5,5 @@ console/Violet/Violet
 *.log
 *.txt
 *.vio
+*.csv
+*.xlsx
