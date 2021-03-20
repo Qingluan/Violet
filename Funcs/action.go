@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -15,6 +16,23 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/tebeka/selenium"
 )
+
+func (self *BaseBrowser) GetEleInfo(ele selenium.WebElement) string {
+	name, _ := ele.TagName()
+	if a, _ := ele.GetAttribute("id"); strings.TrimSpace(a) != "" {
+		name += fmt.Sprintf("#%s", strings.TrimSpace(a))
+	}
+
+	if a, _ := ele.GetAttribute("class"); strings.TrimSpace(a) != "" {
+		name += fmt.Sprintf(".%s", strings.TrimSpace(a))
+	}
+	return name
+}
+
+func (self *BaseBrowser) Parent(ele selenium.WebElement) selenium.WebElement {
+	e, _ := ele.FindElement(selenium.ByXPATH, "./..")
+	return e
+}
 
 func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...string) (res Result) {
 	res = Result{
@@ -80,11 +98,36 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		} else {
 			res.Err = fmt.Errorf("need url !!! %s", id)
 		}
+
 	case "click":
 		before, _ := self.driver.PageSource()
 		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
+		if i, ok := kargs["index"]; ok {
+			if is, err := strconv.Atoi(i.(string)); err == nil {
+				es, _ := self.SmartFindEles(id)
+				if len(es) > is {
+					ele = es[is]
+				}
+			}
+		} else if _, ok := kargs["auto"]; ok {
+			es, _ := self.SmartFindEles(id)
+			for i, e := range es {
+				log.Println(Green("auto Click: try to click no.", i))
+				if res.Err = e.Click(); res.Err != nil {
+					continue
+				} else {
+					defer func() {
+						after, _ := self.driver.PageSource()
+						if after == before {
+							res.Err = fmt.Errorf("not click :%s", id)
+						}
+					}()
+				}
+			}
+		} else {
+			ele, res.Err = self.SmartFindEle(id)
 
+		}
 		if res.Err != nil {
 			return
 		}
@@ -92,10 +135,13 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 
 			return
 		}
+
 		if ok, _ := ele.IsEnabled(); ok {
+			// ele.MoveTo(0, 0)
+			// self.driver.ExecuteScript("arguments[0].scrollIntoView()", []interface{}{ele})
 			if res.Err = ele.Click(); res.Err != nil {
 
-				L("click error")
+				L("found by click error")
 				return
 			} else {
 				defer func() {
@@ -180,6 +226,9 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			ele, res.Err = self.SmartFindEle(id)
 			if res.Err != nil {
 				return
+			}
+			if ele == nil {
+				res.Err = fmt.Errorf("find err: can not found by id \"%s\"", id)
 			}
 			if res.Err = ele.Clear(); res.Err != nil {
 				return
@@ -497,6 +546,58 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	// 	res.Bool = true
 	// 	// return
 	// }
+
+	case "search":
+		var eles []selenium.WebElement
+		eles, res.Err = self.SmartFindEles(id)
+		for _, e := range eles {
+			var t string
+			if _, ok := kargs["text"]; ok {
+				t, res.Err = e.Text()
+				res.Text += "\n" + t
+				continue
+			}
+
+			if _, ok := kargs["in"]; ok {
+
+				t, res.Err = e.GetAttribute("innerHTML")
+				if res.Err != nil {
+					break
+				} else {
+					res.Text += "\n" + t
+				}
+				continue
+			}
+			if _, ok := kargs["out"]; ok {
+				t, res.Err = e.GetAttribute("outerHTML")
+				if res.Err != nil {
+					break
+				} else {
+					res.Text += "\n" + t
+				}
+				continue
+			}
+
+			tagName, _ := e.TagName()
+			res.Text += "\n" + tagName
+
+			// if css, _ := e.CSSProperty(); css != "" {
+			// 	res.Text += " css:" + css
+			// }
+			if clsName, _ := e.GetAttribute("class"); clsName != "" {
+				res.Text += " class:" + clsName
+			}
+			if idName, _ := e.GetAttribute("id"); idName != "" {
+				res.Text += " id:" + idName
+			}
+
+			if d, err := e.LocationInView(); err == nil {
+				res.Text += fmt.Sprintf(" (x-width: %d, y-height:%d)", d.X, d.Y)
+			}
+			if text, _ := e.Text(); strings.TrimSpace(text) != "" {
+				res.Text += "\n\t text:" + strings.TrimSpace(text)
+			}
+		}
 	case "print":
 
 		if _, ok := kargs["all"]; ok {

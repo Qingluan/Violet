@@ -51,6 +51,7 @@ actions:
 	js :
 		# execute js
 		js:  alert(some)
+
 */
 
 type BaseBrowser struct {
@@ -253,6 +254,13 @@ func (self *BaseBrowser) Init() error {
 	}
 	return nil
 }
+func (self *BaseBrowser) ReInit() {
+	service, err := selenium.NewChromeDriverService(self.Path, port)
+	if err != nil {
+		log.Println("re connecting .... failed")
+	}
+	self.service = service
+}
 
 func (self *BaseBrowser) Close() error {
 	if err := self.driver.Quit(); err != nil {
@@ -273,11 +281,12 @@ func (self *BaseBrowser) CurrentDomain() string {
 
 // SmartFindEle, can use xpath, cssselector
 func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele selenium.WebElement, err error) {
-
+	notfound := true
 	if strings.HasPrefix(id, "/") {
 
 		L("Xpath Match", id[1:])
 		ele, err = self.driver.FindElement(selenium.ByXPATH, id)
+		notfound = false
 	} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
 		// if strings.Contains(id, "'") || strings.Contains(id, "\"") {
 		// 	text := strings.ReplaceAll(id[1:], "'", "")
@@ -285,24 +294,84 @@ func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele seleni
 		// 	ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
 		// } else {
 		L("Fuzy Match", id[1:])
+		notfound = false
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
 
 		// }
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
-		L("Xpath Text Match", id)
+		L("Xpath Text Match '", id)
 
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+		eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+		if errs != nil {
+			err = errs
+			return
+		}
+		for _, e := range eles {
+			if ok, errs := e.IsDisplayed(); errs == nil && ok {
+				ele = e
+				notfound = false
+				break
+			}
+		}
+
+		if notfound {
+			err = fmt.Errorf("can not found! by %s", "default")
+		}
 	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
-		L("Xpath Text Match", id)
+		L("Xpath Text Match \" ", id)
 
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+		if eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id)); errs != nil {
+			err = errs
+			return
+		} else {
+			for _, e := range eles {
+				tag, _ := e.TagName()
+				id, _ := e.GetAttribute("id")
+				class, _ := e.GetAttribute("class")
+				ds, _ := e.IsDisplayed()
+				es, _ := e.IsEnabled()
+				ss, _ := e.IsSelected()
+				log.Printf("  Find: %s class: %s id: %s diplayed:%v enable: %v selected: %v\n", Green(tag), class, id, ds, es, ss)
+				if ok, errs := e.IsDisplayed(); errs == nil && ok {
+					ele = e
+
+					notfound = false
+					break
+				}
+			}
+
+			if notfound {
+				err = fmt.Errorf("can not found! by %s", "default")
+			}
+		}
 	} else {
 		L("Xpath Text Match", id)
-
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
-		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
+		if eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id)); errs != nil {
+			err = errs
+			return
+		} else {
+			for _, e := range eles {
+				tag, _ := e.TagName()
+				id, _ := e.GetAttribute("id")
+				class, _ := e.GetAttribute("class")
+				ds, _ := e.IsDisplayed()
+				es, _ := e.IsEnabled()
+				ss, _ := e.IsSelected()
+				log.Printf("  Find: %s class: %s id: %s diplayed:%v enable: %v selected: %v\n", Green(tag), class, id, ds, es, ss)
+
+				if ok, errs := e.IsDisplayed(); errs == nil && ok {
+					notfound = false
+					ele = e
+					break
+				}
+			}
+			if notfound {
+				err = fmt.Errorf("can not found! by %s", "default")
+			}
+		}
 	}
 
 	if err != nil {

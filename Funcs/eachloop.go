@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -125,6 +126,55 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 					}
 
 				})
+			case "wait":
+				sleep := 10
+				if tk, ok := kargs["timeout"]; ok {
+					sleep, res.Err = strconv.Atoi(tk.(string))
+					if res.Err != nil {
+						return
+					}
+				}
+				timeout := time.Now().Add(time.Second * time.Duration(sleep))
+				lastURL, _ := self.driver.CurrentURL()
+
+				if util, ok := kargs["change"]; ok {
+					if util.(string) == "url" {
+						L("Wait Url Change", "timeout:", sleep)
+					}
+				} else {
+					if id != "" {
+						L("Wait Ele appearence", "timeout:", sleep)
+					}
+				}
+
+				for {
+					if id != "" {
+						// L("Wait Ele appearence", "timeout:", sleep)
+						_, err := self.SmartFindEle(id)
+						if err != nil {
+							res.Err = err
+						} else {
+							break
+						}
+
+					} else {
+						if _, ok := kargs["change"]; ok {
+							// if util.(string) == "url" {
+							// L("Wait Url Change", "timeout:", sleep)
+							thisURL, _ := self.driver.CurrentURL()
+							if thisURL != lastURL {
+								break
+							}
+							// }
+						}
+					}
+					if time.Now().After(timeout) {
+						break
+					}
+					time.Sleep(500 * time.Millisecond)
+					res.Err = nil
+				}
+				res.Err = nil
 			// case "if":
 			// 	Ok := false
 			// 	if _, ok := kargs["find"]; ok {
@@ -143,31 +193,63 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 				res.Err = self.driver.Back()
 				self.Sleep()
 			case "click":
-				var eles []selenium.WebElement
-				eles, res.Err = self.SmartFindEles(id)
-				if res.Err != nil {
+				if len(args) == 1 {
+					var eles []selenium.WebElement
+					eles, res.Err = self.SmartFindEles(id)
+					if res.Err != nil {
 
-					return
+						return
+					}
+
+					L("Click ele:", len(eles))
+					if i >= len(eles) {
+						// res.Err = fmt.Errorf("Err: %s", "beyond ele")
+						return
+					}
+					ele := eles[i]
+					_, res.Err = ele.LocationInView()
+					L("Click Then")
+					if res.Err != nil {
+						return
+					}
+					time.Sleep(4 * time.Second)
+					res.Err = ele.Click()
+					L("Click ok")
+					self.Sleep()
+					if res.Err != nil {
+						return
+					}
+				} else {
+					before, _ := self.driver.PageSource()
+					var ele selenium.WebElement
+					ele, res.Err = self.SmartFindEle(id)
+
+					if res.Err != nil {
+						return
+					}
+					if ele == nil {
+
+						return
+					}
+					if ok, _ := ele.IsEnabled(); ok {
+						if res.Err = ele.Click(); res.Err != nil {
+
+							L("click error")
+							return
+						} else {
+							defer func() {
+								after, _ := self.driver.PageSource()
+								if after == before {
+									res.Err = fmt.Errorf("not click :%s", id)
+								}
+							}()
+						}
+					} else {
+						L("Not ok click")
+						res.Err = fmt.Errorf("not click :%s", id)
+					}
 				}
 
-				L("Click ele:", len(eles))
-				if i >= len(eles) {
-					// res.Err = fmt.Errorf("Err: %s", "beyond ele")
-					return
-				}
-				ele := eles[i]
-				_, res.Err = ele.LocationInView()
-				L("Click Then")
-				if res.Err != nil {
-					return
-				}
-				time.Sleep(4 * time.Second)
-				res.Err = ele.Click()
-				L("Click ok")
-				self.Sleep()
-				if res.Err != nil {
-					return
-				}
 			case "input":
 				var eles []selenium.WebElement
 				eles, res.Err = self.SmartFindEles(id)

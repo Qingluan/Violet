@@ -174,7 +174,10 @@ func (self *BaseBrowser) Parse(actions string) {
 		last = self.RunNextLine()
 		self.ConsoleLog(last)
 		if last.Err != nil {
-			L("Exit", last.Err)
+			// L("Exit", last.Err)
+			if strings.Contains(last.Err.Error(), "dial tcp 127.0.0.1:9515: connect: connection refused") {
+				self.ReInit()
+			}
 			break
 		}
 
