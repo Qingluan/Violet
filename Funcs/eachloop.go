@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -76,22 +77,79 @@ func WithEle(args []string, kargs Dict, s *goquery.Selection, do func(sb *goquer
 		}
 	}
 }
+func (self *BaseBrowser) Page() string {
+	p, _ := self.driver.PageSource()
+	return p
+}
 
-func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res Result) {
+func (self *BaseBrowser) RunEach(id string, page string, stacks []string, kargs Dict) (res Result) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewBuffer([]byte(page)))
 	if err != nil {
 		res.Err = err
 		return
 	}
-	// L("Page:", page)
+	counter := func(page, id string) int {
+		newdoc, _ := goquery.NewDocumentFromReader(bytes.NewBuffer([]byte(self.Page())))
+		e := 0
+		newdoc.Find(id).Each(func(i int, _ *goquery.Selection) {
+			e++
+		})
+		return e
+	}
+
+	docSize := counter(page, id)
+	L("kargs:", kargs)
+	// Mainargs, Mainkargs := splitArgsTrim(id)
+	baseLoopNum := 0
+	if mode, ok := kargs["auto"]; ok {
+		log.Println("each mode", Yellow(mode), "size:", Yellow(docSize))
+		thisFinishedNum, _ := self.EachOneBatch(id, doc, baseLoopNum, stacks)
+		baseLoopNum += thisFinishedNum
+		switch mode {
+		case "scroll":
+			batchnum := 0
+			for {
+				batchnum++
+				log.Println(Cyan("batch:", batchnum))
+				self.ScrollTo("", []string{}, kargs)
+				finishNum := 0
+				newdoc, _ := goquery.NewDocumentFromReader(bytes.NewBuffer([]byte(self.Page())))
+				x := counter(self.Page(), id)
+
+				if x == docSize {
+					break
+				} else {
+					docSize = x
+				}
+				finishNum, res = self.EachOneBatch(id, newdoc, baseLoopNum, stacks)
+				baseLoopNum += finishNum
+			}
+		case "next":
+
+		}
+	} else {
+		_, res = self.EachOneBatch(id, doc, baseLoopNum, stacks)
+		return
+	}
+
+	return
+}
+
+func (self *BaseBrowser) EachOneBatch(id string, doc *goquery.Document, baseLoopNum int, stacks []string) (loopNum int, res Result) {
 	doc.Find(id).Each(func(i int, s *goquery.Selection) {
+		if i < baseLoopNum {
+			return
+		}
+		loopNum++
 		// L("Found!", s.Nodes[0].Namespace)
 		defer func() {
 			if res.Err != nil {
 				L("Each Err", res.Err.Error())
 			}
 		}()
+
 		for _, line := range stacks {
+
 			args, kargs := splitArgsTrim(line)
 			// argc := len(args)
 
@@ -106,8 +164,12 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 			// 	continue
 
 			// }
-			L("For-Each:"+main, args[1:], kargs)
+			if len(args) > 1 {
 
+				L("For-Each", main, args[1])
+			} else {
+				L("For-Each", main)
+			}
 			// kargs := parseKargs(args...)
 			switch main {
 			case "save":
@@ -139,18 +201,18 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 
 				if util, ok := kargs["change"]; ok {
 					if util.(string) == "url" {
-						L("Wait Url Change", "timeout:", sleep)
+						// L("Wait Url Change", "timeout:", sleep)
 					}
 				} else {
 					if id != "" {
-						L("Wait Ele appearence", "timeout:", sleep)
+						// L("Wait Ele appearence", "timeout:", sleep)
 					}
 				}
 
 				for {
 					if id != "" {
 						// L("Wait Ele appearence", "timeout:", sleep)
-						_, err := self.SmartFindEle(id)
+						_, err := self.SmartMultiFind(id)
 						if err != nil {
 							res.Err = err
 						} else {
@@ -193,62 +255,8 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 				res.Err = self.driver.Back()
 				self.Sleep()
 			case "click":
-				if len(args) == 1 {
-					var eles []selenium.WebElement
-					eles, res.Err = self.SmartFindEles(id)
-					if res.Err != nil {
 
-						return
-					}
-
-					L("Click ele:", len(eles))
-					if i >= len(eles) {
-						// res.Err = fmt.Errorf("Err: %s", "beyond ele")
-						return
-					}
-					ele := eles[i]
-					_, res.Err = ele.LocationInView()
-					L("Click Then")
-					if res.Err != nil {
-						return
-					}
-					time.Sleep(4 * time.Second)
-					res.Err = ele.Click()
-					L("Click ok")
-					self.Sleep()
-					if res.Err != nil {
-						return
-					}
-				} else {
-					before, _ := self.driver.PageSource()
-					var ele selenium.WebElement
-					ele, res.Err = self.SmartFindEle(id)
-
-					if res.Err != nil {
-						return
-					}
-					if ele == nil {
-
-						return
-					}
-					if ok, _ := ele.IsEnabled(); ok {
-						if res.Err = ele.Click(); res.Err != nil {
-
-							L("click error")
-							return
-						} else {
-							defer func() {
-								after, _ := self.driver.PageSource()
-								if after == before {
-									res.Err = fmt.Errorf("not click :%s", id)
-								}
-							}()
-						}
-					} else {
-						L("Not ok click")
-						res.Err = fmt.Errorf("not click :%s", id)
-					}
-				}
+				res = self.ClickToIdFromEle(i, id, args, kargs)
 
 			case "input":
 				var eles []selenium.WebElement
@@ -276,6 +284,5 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string) (res R
 			// }
 		}
 	})
-
 	return
 }

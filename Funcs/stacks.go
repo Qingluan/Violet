@@ -10,6 +10,7 @@ type Stack struct {
 	TmpID     string
 	TmpPage   string
 	TmpStacks []string
+	TmpKargs  Dict
 }
 
 func (self *BaseBrowser) PushStack(no int, oper string) {
@@ -37,6 +38,7 @@ func (self *BaseBrowser) GetStack() (s *Stack) {
 		s.TmpStacks = last.TmpStacks
 		s.TmpID = last.TmpID
 		s.TmpPage = last.TmpPage
+		s.TmpKargs = last.TmpKargs
 		// CopyStruct(s, &last)
 		// copy(s, last)
 	} else {

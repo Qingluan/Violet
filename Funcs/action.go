@@ -26,6 +26,12 @@ func (self *BaseBrowser) GetEleInfo(ele selenium.WebElement) string {
 	if a, _ := ele.GetAttribute("class"); strings.TrimSpace(a) != "" {
 		name += fmt.Sprintf(".%s", strings.TrimSpace(a))
 	}
+	bd, _ := ele.IsDisplayed()
+	be, _ := ele.IsEnabled()
+	bs, _ := ele.IsSelected()
+	name += fmt.Sprintf(" ( display:%v enable:%v select:%v", bd, be, bs)
+	l, _ := ele.Location()
+	name += fmt.Sprintf(" x:%d y:%d)", l.X, l.Y)
 	return name
 }
 
@@ -86,7 +92,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			// }
 		} else if strings.HasPrefix(id, "http") {
 
-			fmt.Println("Do", id, self.PageLoadTime)
+			// fmt.Println("Do", id, self.PageLoadTime)
 			if self.PageLoadTime > 0 {
 				res.Err = self.driver.SetPageLoadTimeout(time.Second * time.Duration(self.PageLoadTime))
 			}
@@ -125,7 +131,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				}
 			}
 		} else {
-			ele, res.Err = self.SmartFindEle(id)
+			ele, res.Err = self.SmartMultiFind(id)
 
 		}
 		if res.Err != nil {
@@ -141,7 +147,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			// self.driver.ExecuteScript("arguments[0].scrollIntoView()", []interface{}{ele})
 			if res.Err = ele.Click(); res.Err != nil {
 
-				L("found by click error")
+				L("found by click error:", self.GetEleInfo(ele))
 				return
 			} else {
 				defer func() {
@@ -166,7 +172,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			// var ele selenium.WebElement
 			var pwdele selenium.WebElement
 
-			pwdele, res.Err = self.SmartFindEle("//input[@type=\"password\"]")
+			pwdele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]")
 			if res.Err != nil {
 				return
 			}
@@ -178,13 +184,13 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 					break
 				}
 				pa += "../"
-				form, err := self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/form")
+				form, err := self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/form")
 				if err == nil && form != nil {
 					break
 				}
 				i++
 			}
-			ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/input[@type=\"text\"]")
+			ele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/input[@type=\"text\"]")
 			if res.Err != nil {
 				return
 			}
@@ -207,7 +213,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 						ele.SendKeys(selenium.TabKey)
 
 					default:
-						ele, res.Err = self.SmartFindEle("//input[@type=\"password\"]/" + pa + "/*[@type=\"submit\"]")
+						ele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/*[@type=\"submit\"]")
 						if res.Err != nil {
 							return
 						}
@@ -223,7 +229,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 
 			// ele = ele.FindElement(selenium.By)
 		} else {
-			ele, res.Err = self.SmartFindEle(id)
+			ele, res.Err = self.SmartMultiFind(id)
 			if res.Err != nil {
 				return
 			}
@@ -266,7 +272,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		for {
 			if id != "" {
 				// L("Wait Ele appearence", "timeout:", sleep)
-				_, err := self.SmartFindEle(id)
+				_, err := self.SmartMultiFind(id)
 				if err != nil {
 					res.Err = err
 				} else {
@@ -383,33 +389,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		// if header, ok := kargs[""]
 
 	case "scroll":
-		if id != "" {
-			var ele selenium.WebElement
-			ele, res.Err = self.SmartFindEle(id)
-			if res.Err != nil {
-				L("scroll err", res.Err)
-				return
-			} else {
-				// L("Found :", ele)
-			}
-			p, err := ele.Location()
-			if err != nil {
-				res.Err = err
-			}
-			L("move to :", p.X, p.Y)
-			self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", p.Y), nil)
-			self.Sleep()
-		} else {
-			if f, ok := kargs["offset"]; ok {
-				moveOffset, _ := strconv.Atoi(f.(string))
-				self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", moveOffset), nil)
-				self.Sleep()
-
-			} else {
-				self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
-
-			}
-		}
+		res = self.ScrollTo(id, args, kargs)
 	case "js":
 		var resOut interface{}
 		if args != nil {
@@ -472,14 +452,14 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			return
 		}
 		// time.Sleep(1 * time.Second)
-		_, res.Err = self.SmartFindEle(id)
+		_, res.Err = self.SmartMultiFind(id)
 		if res.Err == nil {
 			res.Bool = true
 		}
 		// res.Bool = true
 	case "if":
 		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id)
+		ele, res.Err = self.SmartMultiFind(id)
 		if res.Err != nil {
 
 			return
@@ -529,13 +509,19 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		}
 		// var ele selenium.WebElement
 		// var err error
-		_, res.Err = self.SmartFindEle(id)
-		if res.Err == nil {
-			res.Bool = true
-			return
-		} else {
-			return
+		operReverse := false
+		if _, ok := kargs["not"]; ok {
+			operReverse = true
 		}
+
+		_, res.Err = self.SmartMultiFind(id)
+		if operReverse && res.Err != nil {
+			res.Err = nil
+			res.Bool = true
+		} else if !operReverse && res.Err == nil {
+			res.Bool = true
+		}
+
 	// if args != nil {
 	// 	res.Text, res.Err = ele.GetAttribute(strings.TrimSpace(args[0]))
 	// } else {
@@ -549,6 +535,14 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 
 	case "search":
 		var eles []selenium.WebElement
+		if _, ok := kargs["pipe"]; ok {
+			var ele selenium.WebElement
+			ele, res.Err = self.SmartMultiFind(id)
+			if ele != nil {
+				res.Text = self.GetEleInfo(ele)
+			}
+			return
+		}
 		eles, res.Err = self.SmartFindEles(id)
 		for _, e := range eles {
 			var t string
@@ -578,22 +572,8 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				continue
 			}
 
-			tagName, _ := e.TagName()
-			res.Text += "\n" + tagName
-
-			// if css, _ := e.CSSProperty(); css != "" {
-			// 	res.Text += " css:" + css
-			// }
-			if clsName, _ := e.GetAttribute("class"); clsName != "" {
-				res.Text += " class:" + clsName
-			}
-			if idName, _ := e.GetAttribute("id"); idName != "" {
-				res.Text += " id:" + idName
-			}
-
-			if d, err := e.LocationInView(); err == nil {
-				res.Text += fmt.Sprintf(" (x-width: %d, y-height:%d)", d.X, d.Y)
-			}
+			// tagName, _ := e.TagName()
+			res.Text += "\n" + self.GetEleInfo(e)
 			if text, _ := e.Text(); strings.TrimSpace(text) != "" {
 				res.Text += "\n\t text:" + strings.TrimSpace(text)
 			}
@@ -620,7 +600,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			return
 		}
 		var ele selenium.WebElement
-		ele, res.Err = self.SmartFindEle(id, true)
+		ele, res.Err = self.SmartMultiFind(id, true)
 		if res.Err != nil {
 			L("err", res.Err)
 			return

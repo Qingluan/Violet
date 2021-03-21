@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -75,7 +76,9 @@ type BaseBrowser struct {
 	OperStack       []Stack
 	// OperStackWhere  [][]int
 	// OperNow         string
-	NextLine int
+	option_casp   selenium.Capabilities
+	option_prefix string
+	NextLine      int
 }
 type Result struct {
 	Action string `json:"action"`
@@ -252,6 +255,8 @@ func (self *BaseBrowser) Init() error {
 		}
 		self.driver = driver
 	}
+	self.option_casp = caps
+	self.option_prefix = prefixURL
 	return nil
 }
 func (self *BaseBrowser) ReInit() {
@@ -260,6 +265,11 @@ func (self *BaseBrowser) ReInit() {
 		log.Println("re connecting .... failed")
 	}
 	self.service = service
+	driver, err := selenium.NewRemote(self.option_casp, self.option_prefix)
+	if err != nil {
+		log.Fatal("re connecting ... failed :", err)
+	}
+	self.driver = driver
 }
 
 func (self *BaseBrowser) Close() error {
@@ -279,27 +289,147 @@ func (self *BaseBrowser) CurrentDomain() string {
 	return uu.Host
 }
 
+func (self *BaseBrowser) SmartMultiFind(ids string, useGoQuery ...bool) (ele selenium.WebElement, err error) {
+	if strings.Contains(ids, "|") {
+		idFields := strings.Split(ids, "|")
+		id := strings.TrimSpace(idFields[0])
+		if eles, errs := self.SmartFindEles(id); err != nil {
+			err = fmt.Errorf("%v:%s", errs, id)
+			return
+		} else {
+			for _, ele := range self.SortEles(eles) {
+				for _, id := range idFields[1:] {
+					id = strings.TrimSpace(id)
+					notfound := true
+					if strings.HasPrefix(id, "/") {
+
+						ele, err = ele.FindElement(selenium.ByXPATH, id)
+						if err == nil {
+							// L("Xpath Match", id[1:])
+							err = fmt.Errorf("%v:%s", errs, id)
+						}
+						notfound = false
+					} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
+						notfound = false
+						ele, err = ele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
+						if err == nil {
+							// L("Fuzy Match", id[1:])
+							err = fmt.Errorf("%v:%s", errs, id)
+						}
+					} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
+						eles, errs := ele.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
+						if errs != nil {
+							err = errs
+							break
+						}
+						for _, e := range self.SortEles(eles) {
+							if ok, errs := e.IsDisplayed(); errs == nil && ok {
+								ele = e
+								notfound = false
+								break
+							}
+						}
+						if notfound {
+							err = fmt.Errorf("can not found! by %s", "default")
+						} else {
+							// L("Xpath Text fuzzy '", id)
+						}
+					} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
+						eles, errs := ele.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+						if errs != nil {
+							err = errs
+							break
+						}
+						for _, e := range self.SortEles(eles) {
+							if ok, errs := e.IsDisplayed(); errs == nil && ok {
+								ele = e
+								notfound = false
+								break
+							}
+						}
+						if notfound {
+							err = fmt.Errorf("can not found! by %s", "default")
+						} else {
+							// L("Xpath Text Match '", id)
+						}
+					} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
+						if eles, errs := ele.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id)); errs != nil {
+							err = errs
+							break
+						} else {
+							for _, e := range self.SortEles(eles) {
+								log.Printf("  Find: %s \n", Green(self.GetEleInfo(e)))
+								if ok, errs := e.IsDisplayed(); errs == nil && ok {
+									ele = e
+									notfound = false
+									break
+								}
+							}
+							if notfound {
+								err = fmt.Errorf("can not found! by %s", "default")
+							} else {
+								// L("Xpath Text Match \" ", id)
+							}
+						}
+					} else {
+						if eles, errs := ele.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id)); errs != nil {
+							err = errs
+							break
+						} else {
+							for _, e := range self.SortEles(eles) {
+								log.Printf("  Find: %s\n", Green(self.GetEleInfo(e)))
+								if ok, errs := e.IsDisplayed(); errs == nil && ok {
+									notfound = false
+									ele = e
+									break
+								}
+							}
+							if notfound {
+								err = fmt.Errorf("can not found! by %s", "default")
+							} else {
+
+								// L("Xpath Text Match", id)
+							}
+						}
+					}
+
+					if err != nil {
+						// L("Css Text Match", id)
+						ele, err = ele.FindElement(selenium.ByCSSSelector, id)
+					}
+				}
+				if ele != nil {
+					return ele, nil
+				}
+			}
+
+		}
+
+	} else {
+		ele, err = self.SmartFindEle(ids)
+	}
+	return
+
+}
+
 // SmartFindEle, can use xpath, cssselector
 func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele selenium.WebElement, err error) {
 	notfound := true
 	if strings.HasPrefix(id, "/") {
-
-		L("Xpath Match", id[1:])
 		ele, err = self.driver.FindElement(selenium.ByXPATH, id)
+		if err == nil {
+			// L("Xpath Match", id[1:])
+		}
 		notfound = false
 	} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
-		// if strings.Contains(id, "'") || strings.Contains(id, "\"") {
-		// 	text := strings.ReplaceAll(id[1:], "'", "")
-		// 	text = strings.ReplaceAll(text, "\"", "")
-		// 	ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(string(), %s)]", text))
-		// } else {
-		L("Fuzy Match", id[1:])
 		notfound = false
 		ele, err = self.driver.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
+		if err == nil {
+			// L("Fuzy Match", id[1:])
 
+		}
 		// }
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
-		L("Xpath Text Match '", id)
 
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
@@ -307,10 +437,12 @@ func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele seleni
 			err = errs
 			return
 		}
-		for _, e := range eles {
+		for _, e := range self.SortEles(eles) {
 			if ok, errs := e.IsDisplayed(); errs == nil && ok {
 				ele = e
 				notfound = false
+				// L("Xpath Text Match '", id)
+
 				break
 			}
 		}
@@ -319,23 +451,18 @@ func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele seleni
 			err = fmt.Errorf("can not found! by %s", "default")
 		}
 	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
-		L("Xpath Text Match \" ", id)
 
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		if eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id)); errs != nil {
 			err = errs
 			return
 		} else {
-			for _, e := range eles {
-				tag, _ := e.TagName()
-				id, _ := e.GetAttribute("id")
-				class, _ := e.GetAttribute("class")
-				ds, _ := e.IsDisplayed()
-				es, _ := e.IsEnabled()
-				ss, _ := e.IsSelected()
-				log.Printf("  Find: %s class: %s id: %s diplayed:%v enable: %v selected: %v\n", Green(tag), class, id, ds, es, ss)
+			for _, e := range self.SortEles(eles) {
+
+				log.Printf("  Find: %s\n", Green(self.GetEleInfo(e)))
 				if ok, errs := e.IsDisplayed(); errs == nil && ok {
 					ele = e
+					// L("Xpath Text Match \" ", id)
 
 					notfound = false
 					break
@@ -347,24 +474,19 @@ func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele seleni
 			}
 		}
 	} else {
-		L("Xpath Text Match", id)
 		// text := strings.ReplaceAll(id, " ", "&nsp;")
 		if eles, errs := self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id)); errs != nil {
 			err = errs
 			return
 		} else {
-			for _, e := range eles {
-				tag, _ := e.TagName()
-				id, _ := e.GetAttribute("id")
-				class, _ := e.GetAttribute("class")
-				ds, _ := e.IsDisplayed()
-				es, _ := e.IsEnabled()
-				ss, _ := e.IsSelected()
-				log.Printf("  Find: %s class: %s id: %s diplayed:%v enable: %v selected: %v\n", Green(tag), class, id, ds, es, ss)
+			for _, e := range self.SortEles(eles) {
+				log.Printf("  Find: %s\n", Green(self.GetEleInfo(e)))
 
 				if ok, errs := e.IsDisplayed(); errs == nil && ok {
 					notfound = false
 					ele = e
+					// L("Xpath Text Match", id)
+
 					break
 				}
 			}
@@ -375,13 +497,28 @@ func (self *BaseBrowser) SmartFindEle(id string, useGoQuery ...bool) (ele seleni
 	}
 
 	if err != nil {
-		L("Css Text Match", id)
+		// L("Css Text Match", id)
 
 		// L("warn try cssselector", err.Error())
 		ele, err = self.driver.FindElement(selenium.ByCSSSelector, id)
 	}
-
 	return
+}
+
+func (self *BaseBrowser) SortEles(eles []selenium.WebElement) []selenium.WebElement {
+	sort.Slice(eles, func(i, j int) bool {
+		l, _ := eles[i].Location()
+		r, _ := eles[j].Location()
+		// if l.Y < r.Y {
+		// 	log.Println("less:", self.GetEleInfo(eles[i]), self.GetEleInfo(eles[j]))
+		// } else {
+		// 	log.Println("more:", self.GetEleInfo(eles[i]), self.GetEleInfo(eles[j]))
+
+		// }
+		return l.Y < r.Y
+
+	})
+	return eles
 }
 
 // SmartFindEle, can use xpath, cssselector
@@ -395,21 +532,95 @@ func (self *BaseBrowser) SmartFindEleSource(id string) (html string, err error) 
 	return
 }
 
-func (self *BaseBrowser) SmartFindEles(id string) (ele []selenium.WebElement, err error) {
+func (self *BaseBrowser) SmartFindByFromEle(ele selenium.WebElement, id string) (outele selenium.WebElement, err error) {
 	id = strings.TrimSpace(id)
+	outele = ele
+	last := ele
+	for _, ii := range strings.Split(id, "|") {
+		pipe := strings.TrimSpace(ii)
+		if strings.HasPrefix(pipe, "/") {
+			outele, err = outele.FindElement(selenium.ByXPATH, pipe)
+		} else if strings.HasPrefix(pipe, "'") && strings.HasSuffix(pipe, "'") {
+			outele, err = outele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", pipe))
+		} else if strings.HasPrefix(strings.TrimSpace(pipe), "*") {
+			outele, err = outele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", pipe[1:]))
+		} else if strings.HasPrefix(pipe, "\"") && strings.HasSuffix(pipe, "\"") {
+			outele, err = outele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", pipe))
+		} else {
+			outele, err = outele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", pipe))
+		}
+
+		if err != nil || outele == nil {
+			// log.Println("Warrning try css select", self.GetEleInfo(last), pipe)
+			outele, err = last.FindElement(selenium.ByCSSSelector, pipe)
+			if err != nil {
+				log.Println("err:", err)
+			}
+		}
+		if outele != nil {
+			last = outele
+		} else {
+			log.Println("Warrning", self.GetEleInfo(last), pipe)
+		}
+	}
+	return
+}
+
+func (self *BaseBrowser) SmartFindEles(id string) (eles []selenium.WebElement, err error) {
+	id = strings.TrimSpace(id)
+	var pipe []string
+	if strings.Contains(id, "|") {
+		for i, ii := range strings.Split(id, "|") {
+			if i == 0 {
+				id = ii
+			} else {
+				pipe = append(pipe, strings.TrimSpace(ii))
+			}
+		}
+	}
 	if strings.HasPrefix(id, "/") {
-		ele, err = self.driver.FindElements(selenium.ByXPATH, id)
+		eles, err = self.driver.FindElements(selenium.ByXPATH, id)
 	} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
-		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+		eles, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+	} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
+		eles, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
 	} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
-		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+		eles, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
 	} else {
-		ele, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
+		eles, err = self.driver.FindElements(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
+	}
+	if err != nil || len(eles) == 0 {
+		eles, err = self.driver.FindElements(selenium.ByCSSSelector, id)
 	}
 
-	if err != nil || len(ele) == 0 {
-		ele, err = self.driver.FindElements(selenium.ByCSSSelector, id)
+	for _, id := range pipe {
+		id = strings.TrimSpace(id)
+		tmpeles := []selenium.WebElement{}
+		for _, ele := range self.SortEles(eles) {
+			var tmpele selenium.WebElement
+			if strings.HasPrefix(id, "/") {
+				tmpele, err = ele.FindElement(selenium.ByXPATH, id)
+			} else if strings.HasPrefix(id, "'") && strings.HasSuffix(id, "'") {
+				tmpele, err = ele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+			} else if strings.HasPrefix(strings.TrimSpace(id), "*") {
+				tmpele, err = ele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[contains(text(), \"%s\")]", id[1:]))
+			} else if strings.HasPrefix(id, "\"") && strings.HasSuffix(id, "\"") {
+				tmpele, err = ele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = %s]", id))
+			} else {
+				tmpele, err = ele.FindElement(selenium.ByXPATH, fmt.Sprintf("//*[text() = '%s']", id))
+			}
+
+			if err != nil || tmpele == nil {
+				tmpele, err = ele.FindElement(selenium.ByCSSSelector, id)
+			}
+			if tmpele != nil {
+				tmpeles = append(tmpeles, tmpele)
+			}
+
+		}
+		eles = tmpeles
 	}
+	eles = self.SortEles(eles)
 	return
 }
 
