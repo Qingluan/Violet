@@ -2,14 +2,9 @@ package Funcs
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
-	"time"
-
-	"github.com/tebeka/selenium"
 )
 
 func (self *BaseBrowser) RunThenBack(no int) (result Result) {
@@ -19,140 +14,6 @@ func (self *BaseBrowser) RunThenBack(no int) (result Result) {
 	}()
 	self.NextLine = no
 	result = self.StepRun()
-	return
-}
-
-func (self *BaseBrowser) ScrollTo(id string, args []string, kargs Dict) (res Result) {
-	if id != "" {
-		var ele selenium.WebElement
-		ele, res.Err = self.SmartMultiFind(id)
-		if res.Err != nil {
-			L("scroll err", res.Err)
-			return
-		} else {
-			// L("Found :", ele)
-		}
-		p, err := ele.Location()
-		if err != nil {
-			res.Err = err
-		}
-		L("move to :", p.X, p.Y)
-		self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", p.Y), nil)
-		self.Sleep()
-	} else {
-		if f, ok := kargs["offset"]; ok {
-			moveOffset, _ := strconv.Atoi(f.(string))
-			self.driver.ExecuteScript(fmt.Sprintf("window.scrollTo(0, %d);", moveOffset), nil)
-			self.Sleep()
-
-		} else {
-			self.driver.ExecuteScript("window.scrollTo(0, document.body.scrollHeight)", nil)
-		}
-	}
-	if t, ok := kargs["timeout"]; ok {
-		if w, err := strconv.Atoi(t.(string)); err == nil {
-			time.Sleep(time.Duration(w) * time.Second)
-		}
-	}
-	return
-}
-
-func (self *BaseBrowser) ClickToIdFromEle(i int, id string, args []string, kargs Dict) (res Result) {
-	if len(args) == 2 {
-
-		// before, _ := self.driver.PageSource()
-		var ele selenium.WebElement
-		var eles []selenium.WebElement
-		if _, ok := kargs["global"]; ok {
-			var ele selenium.WebElement
-			ele, res.Err = self.SmartMultiFind(args[1])
-			if ele != nil {
-				if ok, _ := ele.IsEnabled(); ok {
-					before, _ := self.driver.PageSource()
-
-					if res.Err = ele.Click(); res.Err != nil {
-
-						// L("click error")
-						return
-					} else {
-						defer func() {
-							after, _ := self.driver.PageSource()
-							if after == before {
-								res.Err = fmt.Errorf("not click :%s", id)
-							}
-						}()
-					}
-				} else {
-					L("Not ok click")
-					res.Err = fmt.Errorf("not click :%s", id)
-				}
-			}
-		} else {
-			eles, res.Err = self.SmartFindEles(id)
-			if len(eles) <= i {
-				log.Println(Red("ranger err :", i))
-				return
-			}
-			if i >= len(eles) {
-				// res.Err = fmt.Errorf("Err: %s", "beyond ele")
-				return
-			}
-			ele = eles[i]
-			_, res.Err = ele.LocationInView()
-
-			if res.Err != nil {
-				return
-			}
-			L("Click Then by", args[1])
-			ele, res.Err = self.SmartFindByFromEle(ele, args[1])
-			if ele != nil {
-				res.Err = ele.Click()
-				// L("Click ok")
-				self.Sleep()
-				if res.Err != nil {
-					return
-				}
-			}
-			// time.Sleep(4 * time.Second)
-
-		}
-
-	} else {
-		before, _ := self.driver.PageSource()
-		var ele selenium.WebElement
-		var eles []selenium.WebElement
-		eles, res.Err = self.SmartFindEles(id)
-		if len(eles) <= i {
-			log.Println(Red("ranger err :", i))
-			return
-		}
-		ele = eles[i]
-
-		if res.Err != nil {
-			return
-		}
-		if ele == nil {
-
-			return
-		}
-		if ok, _ := ele.IsEnabled(); ok {
-			if res.Err = ele.Click(); res.Err != nil {
-
-				L("click error")
-				return
-			} else {
-				defer func() {
-					after, _ := self.driver.PageSource()
-					if after == before {
-						res.Err = fmt.Errorf("not click :%s", id)
-					}
-				}()
-			}
-		} else {
-			L("Not ok click")
-			res.Err = fmt.Errorf("not click :%s", id)
-		}
-	}
 	return
 }
 

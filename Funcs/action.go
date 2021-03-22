@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -35,7 +34,7 @@ func (self *BaseBrowser) GetEleInfo(ele selenium.WebElement) string {
 	return name
 }
 
-func (self *BaseBrowser) Parent(ele selenium.WebElement) selenium.WebElement {
+func (self *BaseBrowser) GetParent(ele selenium.WebElement) selenium.WebElement {
 	e, _ := ele.FindElement(selenium.ByXPATH, "./..")
 	return e
 }
@@ -106,197 +105,15 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		}
 
 	case "click":
-		before, _ := self.driver.PageSource()
-		var ele selenium.WebElement
-		if i, ok := kargs["index"]; ok {
-			if is, err := strconv.Atoi(i.(string)); err == nil {
-				es, _ := self.SmartFindEles(id)
-				if len(es) > is {
-					ele = es[is]
-				}
-			}
-		} else if _, ok := kargs["auto"]; ok {
-			es, _ := self.SmartFindEles(id)
-			for i, e := range es {
-				log.Println(Green("auto Click: try to click no.", i))
-				if res.Err = e.Click(); res.Err != nil {
-					continue
-				} else {
-					defer func() {
-						after, _ := self.driver.PageSource()
-						if after == before {
-							res.Err = fmt.Errorf("not click :%s", id)
-						}
-					}()
-				}
-			}
-		} else {
-			ele, res.Err = self.SmartMultiFind(id)
-
-		}
-		if res.Err != nil {
-			return
-		}
-		if ele == nil {
-
-			return
-		}
-
-		if ok, _ := ele.IsEnabled(); ok {
-			// ele.MoveTo(0, 0)
-			// self.driver.ExecuteScript("arguments[0].scrollIntoView()", []interface{}{ele})
-			if res.Err = ele.Click(); res.Err != nil {
-
-				L("found by click error:", self.GetEleInfo(ele))
-				return
-			} else {
-				defer func() {
-					after, _ := self.driver.PageSource()
-					if after == before {
-						res.Err = fmt.Errorf("not click :%s", id)
-					}
-				}()
-			}
-		} else {
-			L("Not ok click")
-			res.Err = fmt.Errorf("not click :%s", id)
-		}
+		res = self.OperClickToId(id, args, kargs)
 		// res.Text, res.Err = self.driver.PageSource()
 	case "back":
 		res.Err = self.driver.Back()
 
 	case "input":
-		var ele selenium.WebElement
-
-		if name, ok := kargs["name"]; ok {
-			// var ele selenium.WebElement
-			var pwdele selenium.WebElement
-
-			pwdele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]")
-			if res.Err != nil {
-				return
-			}
-			pa := "../"
-			limit := 20
-			i := 0
-			for {
-				if i > limit {
-					break
-				}
-				pa += "../"
-				form, err := self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/form")
-				if err == nil && form != nil {
-					break
-				}
-				i++
-			}
-			ele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/input[@type=\"text\"]")
-			if res.Err != nil {
-				return
-			}
-			res.Err = ele.SendKeys(name.(string))
-			if res.Err != nil {
-				return
-			}
-			L("User -- >", name.(string))
-			if pwd, ok := kargs["password"]; ok {
-				if res.Err != nil {
-					return
-				}
-				res.Err = pwdele.SendKeys(pwd.(string))
-
-				L("Pwd -- >", pwd.(string))
-				self.Sleep()
-				if end, ok := kargs["end"]; ok {
-					switch end.(string) {
-					case "\t":
-						ele.SendKeys(selenium.TabKey)
-
-					default:
-						ele, res.Err = self.SmartMultiFind("//input[@type=\"password\"]/" + pa + "/*[@type=\"submit\"]")
-						if res.Err != nil {
-							return
-						}
-
-						if ele != nil {
-
-							L("Submit -- >", pwd.(string))
-							ele.Click()
-						}
-					}
-				}
-			}
-
-			// ele = ele.FindElement(selenium.By)
-		} else {
-			ele, res.Err = self.SmartMultiFind(id)
-			if res.Err != nil {
-				return
-			}
-			if ele == nil {
-				res.Err = fmt.Errorf("find err: can not found by id \"%s\"", id)
-			}
-			if res.Err = ele.Clear(); res.Err != nil {
-				return
-			}
-
-			// Enter some new code in text box.
-			if args == nil {
-				res.Text, res.Err = self.driver.PageSource()
-				return
-			}
-			res.Err = ele.SendKeys(args[0])
-		}
-
+		res = self.OperInput(id, args, kargs)
 	case "wait":
-		sleep := 10
-		if tk, ok := kargs["timeout"]; ok {
-			sleep, res.Err = strconv.Atoi(tk.(string))
-			if res.Err != nil {
-				return
-			}
-		}
-		timeout := time.Now().Add(time.Second * time.Duration(sleep))
-		lastURL, _ := self.driver.CurrentURL()
-
-		if util, ok := kargs["change"]; ok {
-			if util.(string) == "url" {
-				L("Wait Url Change", "timeout:", sleep)
-			}
-		} else {
-			if id != "" {
-				L("Wait Ele appearence", "timeout:", sleep)
-			}
-		}
-
-		for {
-			if id != "" {
-				// L("Wait Ele appearence", "timeout:", sleep)
-				_, err := self.SmartMultiFind(id)
-				if err != nil {
-					res.Err = err
-				} else {
-					break
-				}
-
-			} else {
-				if _, ok := kargs["change"]; ok {
-					// if util.(string) == "url" {
-					// L("Wait Url Change", "timeout:", sleep)
-					thisURL, _ := self.driver.CurrentURL()
-					if thisURL != lastURL {
-						break
-					}
-					// }
-				}
-			}
-			if time.Now().After(timeout) {
-				break
-			}
-			time.Sleep(500 * time.Millisecond)
-			res.Err = nil
-		}
-		res.Err = nil
+		res = self.OperWait(id, args, kargs)
 	case "refresh":
 		self.driver.Refresh()
 	case "export":
@@ -389,7 +206,7 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 		// if header, ok := kargs[""]
 
 	case "scroll":
-		res = self.ScrollTo(id, args, kargs)
+		res = self.OperScrollTo(id, args, kargs)
 	case "js":
 		var resOut interface{}
 		if args != nil {

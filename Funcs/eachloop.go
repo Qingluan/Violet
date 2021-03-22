@@ -3,15 +3,10 @@ package Funcs
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/tebeka/selenium"
 )
 
 func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) string {
@@ -111,7 +106,7 @@ func (self *BaseBrowser) RunEach(id string, page string, stacks []string, kargs 
 			for {
 				batchnum++
 				log.Println(Cyan("batch:", batchnum))
-				self.ScrollTo("", []string{}, kargs)
+				self.OperScrollTo("", []string{}, kargs)
 				finishNum := 0
 				newdoc, _ := goquery.NewDocumentFromReader(bytes.NewBuffer([]byte(self.Page())))
 				x := counter(self.Page(), id)
@@ -173,103 +168,18 @@ func (self *BaseBrowser) EachOneBatch(id string, doc *goquery.Document, baseLoop
 			// kargs := parseKargs(args...)
 			switch main {
 			case "save":
-
-				fp, err := os.OpenFile(args[1], os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
-				if err != nil {
-					res.Err = err
-					return
-				}
-				defer fp.Close()
-				WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
-					if len(args) > 0 {
-						_, res.Err = fp.WriteString(self.EleToJsonString(sb, args...) + "\n")
-					} else {
-						_, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
-					}
-
-				})
+				self.OperCollect(id, s, args, kargs)
 			case "wait":
-				sleep := 10
-				if tk, ok := kargs["timeout"]; ok {
-					sleep, res.Err = strconv.Atoi(tk.(string))
-					if res.Err != nil {
-						return
-					}
-				}
-				timeout := time.Now().Add(time.Second * time.Duration(sleep))
-				lastURL, _ := self.driver.CurrentURL()
-
-				if util, ok := kargs["change"]; ok {
-					if util.(string) == "url" {
-						// L("Wait Url Change", "timeout:", sleep)
-					}
-				} else {
-					if id != "" {
-						// L("Wait Ele appearence", "timeout:", sleep)
-					}
-				}
-
-				for {
-					if id != "" {
-						// L("Wait Ele appearence", "timeout:", sleep)
-						_, err := self.SmartMultiFind(id)
-						if err != nil {
-							res.Err = err
-						} else {
-							break
-						}
-
-					} else {
-						if _, ok := kargs["change"]; ok {
-							// if util.(string) == "url" {
-							// L("Wait Url Change", "timeout:", sleep)
-							thisURL, _ := self.driver.CurrentURL()
-							if thisURL != lastURL {
-								break
-							}
-							// }
-						}
-					}
-					if time.Now().After(timeout) {
-						break
-					}
-					time.Sleep(500 * time.Millisecond)
-					res.Err = nil
-				}
-				res.Err = nil
-			// case "if":
-			// 	Ok := false
-			// 	if _, ok := kargs["find"]; ok {
-			// 		WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
-			// 			if strings.Contains(sb.Text(), id) {
-			// 				Ok = true
-			// 			}
-			// 		})
-			// 	} else {
-			// 		if strings.Contains(s.Text(), id) {
-			// 			Ok = true
-			// 		}
-			// 	}
-			// 	res.Bool = Ok
+				res = self.OperWait(id, args, kargs)
 			case "back":
 				res.Err = self.driver.Back()
 				self.Sleep()
 			case "click":
 
-				res = self.ClickToIdFromEle(i, id, args, kargs)
+				res = self.OperClickToIdFromEle(i, id, args, kargs)
 
 			case "input":
-				var eles []selenium.WebElement
-				eles, res.Err = self.SmartFindEles(id)
-				if res.Err != nil {
-					return
-				}
-				if i >= len(eles) {
-					res.Err = fmt.Errorf("Err: %s", "beyond ele")
-					return
-				}
-				ele := eles[i]
-				res.Err = ele.SendKeys(args[1])
+				res = self.OperInputFromEle(i, id, args, kargs)
 				self.Sleep()
 			case "print":
 				WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
