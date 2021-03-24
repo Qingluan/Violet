@@ -218,15 +218,18 @@ func (self *BaseBrowser) OperInputFromEle(i int, mainId string, args []string, k
 	return
 }
 
-func (self *BaseBrowser) OperCollect(id string, s *goquery.Selection, args []string, kargs Dict) (res Result) {
-
+func (self *BaseBrowser) OperCollect(id string, doc *goquery.Document, s *goquery.Selection, args []string, kargs Dict) (res Result) {
+	filePath, _ := kargs["output"]
+	if filePath == "" {
+		res.Err = fmt.Errorf("must specify 'output' as file path")
+	}
 	fp, err := os.OpenFile(args[1], os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		res.Err = err
 		return
 	}
 	defer fp.Close()
-	WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
+	WithEle(id, args, kargs, doc, s, func(sb *goquery.Selection, args []string) {
 		if len(args) > 0 {
 			_, res.Err = fp.WriteString(self.EleToJsonString(sb, args...) + "\n")
 		} else {

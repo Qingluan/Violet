@@ -1,8 +1,10 @@
 package Funcs
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -252,4 +254,68 @@ func (self *BaseBrowser) OperClickToIdFromEle(i int, id string, args []string, k
 		}
 	}
 	return
+}
+
+func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict) (res Result) {
+	// var filePath string
+	filePath, ok := kargs["output"]
+	if !ok {
+		res.Err = fmt.Errorf("no 'output' to specify a file path !")
+		return
+	}
+
+	fp, err := os.OpenFile(filePath.(string), os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		res.Err = err
+		return
+	}
+	defer fp.Close()
+	var eles []selenium.WebElement
+	// var ok bool
+	eles, res.Err = self.SmartFindEles(id)
+	index := -1
+	if indexstr, ok := kargs["index"]; ok {
+		index, _ = strconv.Atoi(indexstr.(string))
+	}
+	do := func(ele selenium.WebElement, attrs []string) {
+		ss := make(map[string]string)
+
+		if len(attrs) == 0 {
+			ss["html"], _ = ele.GetAttribute("outerHTML")
+			ss["text"], _ = ele.Text()
+		} else {
+
+			for _, k := range attrs {
+				if k == "text" {
+					ss["text"], _ = ele.Text()
+				} else {
+					ss[k], _ = ele.GetAttribute(k)
+				}
+			}
+
+		}
+
+		res, _ := json.Marshal(&ss)
+		// return string(res)
+		fp.WriteString(string(res) + "\n")
+	}
+	for n, ele := range eles {
+		if attrs, ok := kargs["attrs"]; ok {
+			switch attrs.(type) {
+			case []string:
+				do(ele, attrs.([]string))
+			case string:
+				do(ele, []string{attrs.(string)})
+			}
+		} else {
+
+			do(ele, []string{})
+			// _, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
+		}
+		if n == index {
+			break
+		}
+	}
+	return
+
 }

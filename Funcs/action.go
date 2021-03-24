@@ -349,7 +349,8 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	// 	res.Bool = true
 	// 	// return
 	// }
-
+	case "collect":
+		res = self.OperCollectSingle(id, args, kargs)
 	case "search":
 		var eles []selenium.WebElement
 		if _, ok := kargs["pipe"]; ok {
@@ -360,8 +361,16 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			}
 			return
 		}
+		index := -1
+		var err error
+		if indexStr, ok := kargs["index"]; ok {
+			index, err = strconv.Atoi(indexStr.(string))
+			if err != nil {
+				index = -1
+			}
+		}
 		eles, res.Err = self.SmartFindEles(id)
-		for _, e := range eles {
+		for no, e := range eles {
 			var t string
 			if _, ok := kargs["text"]; ok {
 				t, res.Err = e.Text()
@@ -393,6 +402,9 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			res.Text += "\n" + self.GetEleInfo(e)
 			if text, _ := e.Text(); strings.TrimSpace(text) != "" {
 				res.Text += "\n\t text:" + strings.TrimSpace(text)
+			}
+			if index == no {
+				break
 			}
 		}
 	case "print":

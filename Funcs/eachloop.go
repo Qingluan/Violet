@@ -40,12 +40,27 @@ func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) st
 	return string(res)
 }
 
-func WithEle(args []string, kargs Dict, s *goquery.Selection, do func(sb *goquery.Selection, args []string)) {
+func WithEle(id string, args []string, kargs Dict, doc *goquery.Document, s *goquery.Selection, do func(sb *goquery.Selection, args []string)) {
 	if ifcondition, ok := kargs["contains"]; ok {
 		if !strings.Contains(s.Text(), ifcondition.(string)) {
 			L("test Failed so jump")
 			return
 		}
+	}
+	if _, ok := kargs["global"]; ok {
+		doc.Find(id).Each(func(i int, sb *goquery.Selection) {
+			if attrs, ok := kargs["attrs"]; ok {
+				switch attrs.(type) {
+				case []string:
+					do(sb, attrs.([]string))
+				}
+			} else {
+
+				do(sb, []string{})
+				// _, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
+			}
+		})
+		return
 	}
 	if key, ok := kargs["find"]; ok {
 		s.Find(key.(string)).Each(func(i int, sb *goquery.Selection) {
@@ -167,8 +182,8 @@ func (self *BaseBrowser) EachOneBatch(id string, doc *goquery.Document, baseLoop
 			}
 			// kargs := parseKargs(args...)
 			switch main {
-			case "save":
-				self.OperCollect(id, s, args, kargs)
+			case "collect":
+				self.OperCollect(id, doc, s, args, kargs)
 			case "wait":
 				res = self.OperWait(id, args, kargs)
 			case "back":
@@ -182,7 +197,7 @@ func (self *BaseBrowser) EachOneBatch(id string, doc *goquery.Document, baseLoop
 				res = self.OperInputFromEle(i, id, args, kargs)
 				self.Sleep()
 			case "print":
-				WithEle(args, kargs, s, func(sb *goquery.Selection, args []string) {
+				WithEle(id, args, kargs, doc, s, func(sb *goquery.Selection, args []string) {
 					L("show", self.EleToJsonString(s, args...))
 				})
 			}
