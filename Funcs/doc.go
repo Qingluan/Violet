@@ -21,6 +21,7 @@ var (
 		"scroll:":     `offset=100`,
 		"save:":       `cookie="True"`,
 		"savescreen:": ``,
+		"collecct:":   "",
 		"search:":     "",
 		"click:":      "index=",
 		"if:":         `attrStr,compareStr`,
@@ -31,6 +32,10 @@ var (
 		},
 		"js:":     `*jscode in one line`,
 		"export:": ``,
+		"index=":  "",
+		"global=": "",
+		"output=": "",
+		"mulit=":  "",
 	}
 
 	Tui = struct {

@@ -40,7 +40,7 @@ func (self *BaseBrowser) EleToJsonString(s *goquery.Selection, key ...string) st
 	return string(res)
 }
 
-func WithEle(id string, args []string, kargs Dict, doc *goquery.Document, s *goquery.Selection, do func(sb *goquery.Selection, args []string)) {
+func WithEle(id string, args []string, kargs Dict, doc *goquery.Document, s *goquery.Selection, do func(sb *goquery.Selection, args []string), multiDo func(sss map[string][]string)) {
 	if ifcondition, ok := kargs["contains"]; ok {
 		if !strings.Contains(s.Text(), ifcondition.(string)) {
 			L("test Failed so jump")
@@ -62,6 +62,7 @@ func WithEle(id string, args []string, kargs Dict, doc *goquery.Document, s *goq
 		})
 		return
 	}
+
 	if key, ok := kargs["find"]; ok {
 		s.Find(key.(string)).Each(func(i int, sb *goquery.Selection) {
 			if attrs, ok := kargs["attrs"]; ok {
@@ -75,6 +76,55 @@ func WithEle(id string, args []string, kargs Dict, doc *goquery.Document, s *goq
 				// _, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
 			}
 		})
+	} else if multi, ok := kargs["multi"]; ok {
+		sss := make(map[string][]string)
+		sss["multi"] = []string{}
+
+		switch multi.(type) {
+		case []string:
+			log.Println(Green("Muti:"), multi.([]string))
+			for _, subid := range multi.([]string) {
+				if strings.HasPrefix(subid, "^") {
+					doc.Find(subid[1:]).EachWithBreak(func(i int, sb *goquery.Selection) bool {
+						log.Println(Cyan("found:", subid))
+						ss := make(map[string]string)
+						ss["text"] = sb.Text()
+						// ss["html"], _ = sb.Html()
+						// fp.WriteString(self.EleToJson(subele) + "\n")
+						ssRes, _ := json.Marshal(ss)
+						sss["multi"] = append(sss["multi"], string(ssRes))
+
+						return false
+					})
+				} else {
+					s.Find(subid).EachWithBreak(func(i int, sb *goquery.Selection) bool {
+						log.Println(Cyan("found:", subid))
+						ss := make(map[string]string)
+						ss["text"] = sb.Text()
+						// ss["html"], _ = sb.Html()
+						// fp.WriteString(self.EleToJson(subele) + "\n")
+						ssRes, _ := json.Marshal(ss)
+						sss["multi"] = append(sss["multi"], string(ssRes))
+
+						return false
+					})
+				}
+
+			}
+		case string:
+			s.Find(multi.(string)).Each(func(i int, sb *goquery.Selection) {
+				ss := make(map[string]string)
+				ss["text"] = sb.Text()
+				// ss["html"], _ = sb.Html()
+				// fp.WriteString(self.EleToJson(subele) + "\n")
+				ssRes, _ := json.Marshal(ss)
+				sss["multi"] = append(sss["multi"], string(ssRes))
+
+			})
+		}
+
+		multiDo(sss)
+
 	} else {
 		argc := len(args)
 		if argc > 2 {
@@ -199,6 +249,10 @@ func (self *BaseBrowser) EachOneBatch(id string, doc *goquery.Document, baseLoop
 			case "print":
 				WithEle(id, args, kargs, doc, s, func(sb *goquery.Selection, args []string) {
 					L("show", self.EleToJsonString(s, args...))
+				}, func(sss map[string][]string) {
+					f, _ := json.MarshalIndent(sss, "", "  ")
+					L("show:", Yellow(string(f)))
+
 				})
 			}
 

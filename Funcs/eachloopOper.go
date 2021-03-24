@@ -1,6 +1,7 @@
 package Funcs
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -223,19 +224,25 @@ func (self *BaseBrowser) OperCollect(id string, doc *goquery.Document, s *goquer
 	if filePath == "" {
 		res.Err = fmt.Errorf("must specify 'output' as file path")
 	}
-	fp, err := os.OpenFile(args[1], os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
+	fp, err := os.OpenFile(filePath.(string), os.O_APPEND|os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		res.Err = err
 		return
 	}
 	defer fp.Close()
+
+	// sss := make(map[string][]string)
 	WithEle(id, args, kargs, doc, s, func(sb *goquery.Selection, args []string) {
 		if len(args) > 0 {
 			_, res.Err = fp.WriteString(self.EleToJsonString(sb, args...) + "\n")
+
 		} else {
 			_, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
 		}
 
+	}, func(sss map[string][]string) {
+		ssStr, _ := json.Marshal(sss)
+		_, res.Err = fp.WriteString(string(ssStr) + "\n")
 	})
 	return
 }

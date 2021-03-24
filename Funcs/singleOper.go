@@ -256,6 +256,22 @@ func (self *BaseBrowser) OperClickToIdFromEle(i int, id string, args []string, k
 	return
 }
 
+func (self *BaseBrowser) EleToJson(ele selenium.WebElement, attrs ...string) string {
+	ss := make(map[string]string)
+	// subele , _ := self.SmartFindByFromEle(ele,subid)
+	ss["html"], _ = ele.GetAttribute("outerHTML")
+	ss["text"], _ = ele.Text()
+	for _, k := range attrs {
+		if k == "text" {
+			ss["text"], _ = ele.Text()
+		} else {
+			ss[k], _ = ele.GetAttribute(k)
+		}
+	}
+	res, _ := json.Marshal(&ss)
+	return string(res)
+}
+
 func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict) (res Result) {
 	// var filePath string
 	filePath, ok := kargs["output"]
@@ -277,39 +293,59 @@ func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict)
 	if indexstr, ok := kargs["index"]; ok {
 		index, _ = strconv.Atoi(indexstr.(string))
 	}
-	do := func(ele selenium.WebElement, attrs []string) {
-		ss := make(map[string]string)
+	do := func(ele selenium.WebElement, attrs []string, kargs Dict) {
 
-		if len(attrs) == 0 {
-			ss["html"], _ = ele.GetAttribute("outerHTML")
-			ss["text"], _ = ele.Text()
-		} else {
+		if multi, ok := kargs["multi"]; ok {
+			sss := make(map[string][]string)
+			sss["multi"] = []string{}
+			switch multi.(type) {
+			case []string:
 
-			for _, k := range attrs {
-				if k == "text" {
-					ss["text"], _ = ele.Text()
-				} else {
-					ss[k], _ = ele.GetAttribute(k)
+				for _, subid := range multi.([]string) {
+					subele, _ := self.SmartFindByFromEle(ele, subid)
+					sss["multi"] = append(sss["multi"], self.EleToJson(subele))
 				}
+			case string:
+				subele, _ := self.SmartFindByFromEle(ele, multi.(string))
+				sss["multi"] = append(sss["multi"], self.EleToJson(subele))
+				// fp.WriteString(self.EleToJson(subele) + "\n")
 			}
+			resStr, _ := json.Marshal(sss)
+			fp.WriteString(string(resStr) + "\n")
+		} else {
+			ss := make(map[string]string)
+			if len(attrs) == 0 {
+				ss["html"], _ = ele.GetAttribute("outerHTML")
+				ss["text"], _ = ele.Text()
+			} else {
+
+				for _, k := range attrs {
+					if k == "text" {
+						ss["text"], _ = ele.Text()
+					} else {
+						ss[k], _ = ele.GetAttribute(k)
+					}
+				}
+
+			}
+			res, _ := json.Marshal(&ss)
+			// return string(res)
+			fp.WriteString(string(res) + "\n")
 
 		}
 
-		res, _ := json.Marshal(&ss)
-		// return string(res)
-		fp.WriteString(string(res) + "\n")
 	}
 	for n, ele := range eles {
 		if attrs, ok := kargs["attrs"]; ok {
 			switch attrs.(type) {
 			case []string:
-				do(ele, attrs.([]string))
+				do(ele, attrs.([]string), kargs)
 			case string:
-				do(ele, []string{attrs.(string)})
+				do(ele, []string{attrs.(string)}, kargs)
 			}
 		} else {
 
-			do(ele, []string{})
+			do(ele, []string{}, kargs)
 			// _, res.Err = fp.WriteString(self.EleToJsonString(sb) + "\n")
 		}
 		if n == index {
