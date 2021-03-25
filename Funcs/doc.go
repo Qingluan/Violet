@@ -36,6 +36,7 @@ var (
 		"global=": "",
 		"output=": "",
 		"mulit=":  "",
+		"test":    "",
 	}
 
 	Tui = struct {

@@ -20,23 +20,34 @@ func (self *BaseBrowser) TestSelect(page string) (res Result) {
 			return
 		})
 		args, kargs := splitArgsTrim(inputArgs)
-		if len(args) == 0 {
+
+		fmt.Println(Blue(args, kargs))
+		if len(args) < 1 {
 			continue
 		}
-		id := args[0]
-		if id == "exit" {
+		tp := args[0]
+		if tp == "exit" {
 			break
 		}
-		doc.Find(id).EachWithBreak(func(i int, sb *goquery.Selection) (isReturn bool) {
-			isReturn = true
-			if is, ok := kargs["index"]; ok {
-				if sss, _ := strconv.Atoi(is.(string)); sss == i {
-					isReturn = false
+		if len(args) < 2 {
+			continue
+		}
+		id := args[1]
+		switch tp {
+		case "xpath":
+		default:
+			doc.Find(id).EachWithBreak(func(i int, sb *goquery.Selection) (isReturn bool) {
+				isReturn = true
+				if is, ok := kargs["index"]; ok {
+					if sss, _ := strconv.Atoi(is.(string)); sss == i {
+						isReturn = false
+					}
 				}
-			}
-			fmt.Println(Yellow(sb.Html))
-			return
-		})
+				fmt.Println(Yellow(sb.Html()))
+				return
+			})
+		}
+
 	}
 	return
 
