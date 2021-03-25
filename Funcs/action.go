@@ -370,40 +370,42 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 			}
 		}
 		eles, res.Err = self.SmartFindEles(id)
+		// ok := 0
 		for no, e := range eles {
-			var t string
-			if _, ok := kargs["text"]; ok {
-				t, res.Err = e.Text()
-				res.Text += "\n" + t
-				continue
-			}
-
-			if _, ok := kargs["in"]; ok {
-
-				t, res.Err = e.GetAttribute("innerHTML")
-				if res.Err != nil {
-					break
-				} else {
-					res.Text += "\n" + t
-				}
-				continue
-			}
-			if _, ok := kargs["out"]; ok {
-				t, res.Err = e.GetAttribute("outerHTML")
-				if res.Err != nil {
-					break
-				} else {
-					res.Text += "\n" + t
-				}
-				continue
-			}
-
-			// tagName, _ := e.TagName()
-			res.Text += "\n" + self.GetEleInfo(e)
-			if text, _ := e.Text(); strings.TrimSpace(text) != "" {
-				res.Text += "\n\t text:" + strings.TrimSpace(text)
-			}
 			if index == no {
+				var t string
+				if _, ok := kargs["text"]; ok {
+					t, res.Err = e.Text()
+					res.Text += "\n" + t
+					continue
+				}
+
+				if _, ok := kargs["in"]; ok {
+
+					t, res.Err = e.GetAttribute("innerHTML")
+					if res.Err != nil {
+						break
+					} else {
+						res.Text += "\n" + t
+					}
+					continue
+				}
+				if _, ok := kargs["out"]; ok {
+					t, res.Err = e.GetAttribute("outerHTML")
+					if res.Err != nil {
+						break
+					} else {
+						res.Text += "\n" + t
+					}
+					continue
+				}
+
+				// tagName, _ := e.TagName()
+				res.Text += "\n" + self.GetEleInfo(e)
+				if text, _ := e.Text(); strings.TrimSpace(text) != "" {
+					res.Text += "\n\t text:" + strings.TrimSpace(text)
+				}
+
 				break
 			}
 		}

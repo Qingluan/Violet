@@ -572,7 +572,7 @@ func (self *BaseBrowser) SmartFindEles(id string) (eles []selenium.WebElement, e
 	if strings.Contains(id, "|") {
 		for i, ii := range strings.Split(id, "|") {
 			if i == 0 {
-				id = ii
+				id = strings.TrimSpace(ii)
 			} else {
 				pipe = append(pipe, strings.TrimSpace(ii))
 			}
@@ -616,9 +616,10 @@ func (self *BaseBrowser) SmartFindEles(id string) (eles []selenium.WebElement, e
 			if tmpele != nil {
 				tmpeles = append(tmpeles, tmpele)
 			}
-
 		}
-		eles = tmpeles
+		if len(tmpeles) > 0 {
+			eles = tmpeles
+		}
 	}
 	eles = self.SortEles(eles)
 	return
