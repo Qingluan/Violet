@@ -409,6 +409,9 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 				break
 			}
 		}
+	case "test":
+		page := self.Page()
+		self.TestSelect(page)
 	case "print":
 
 		if _, ok := kargs["all"]; ok {
