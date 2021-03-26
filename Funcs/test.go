@@ -41,9 +41,12 @@ func (self *BaseBrowser) TestSelect(page string) (res Result) {
 				if is, ok := kargs["index"]; ok {
 					if sss, _ := strconv.Atoi(is.(string)); sss == i {
 						isReturn = false
+						fmt.Println(Yellow(sb.Html()))
 					}
+
+				} else {
+					fmt.Println(Yellow(sb.Html()))
 				}
-				fmt.Println(Yellow(sb.Html()))
 				return
 			})
 		}
