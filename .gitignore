@@ -7,3 +7,5 @@ console/Violet/Violet
 *.vio
 *.csv
 *.xlsx
+*.json
+*.png
