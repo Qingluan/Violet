@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Qingluan/FrameUtils/utils"
 	"github.com/tebeka/selenium"
 	"golang.org/x/net/html"
 )
@@ -22,48 +23,58 @@ func splitArgsTrim(raw string) (as []string, kargs Dict) {
 	if strings.TrimSpace(raw) == "" {
 		return
 	}
-	for _, w := range strings.SplitN(raw, ":", 2) {
-		as = append(as, parseArg(w))
-	}
+	if strings.HasPrefix(raw, ":") {
 
-	kas := []string{}
-	// L("argc :", len(as))
-	if len(as) > 1 {
-		if strings.Contains(as[1], ",") {
-			argsStr := as[1]
-			as = []string{as[0]}
-			for _, w2 := range splitargs(argsStr) {
-				if isKargs(w2) {
-					kas = append(kas, parseArg(w2))
-				} else {
-					as = append(as, parseArg(w2))
-
-				}
-
-			}
-		} else {
-			needremove := []string{}
-			for i := range as {
-				w2 := as[i]
-				if isKargs(w2) {
-					kas = append(kas, parseArg(w2))
-					needremove = append(needremove, w2)
-				}
-			}
-			for _, is := range needremove {
-				as = remove(as, is)
-			}
+		fs := strings.SplitN(raw, ":", 2)
+		as = append(as, strings.TrimSpace(fs[0]))
+		args, wkargs := utils.DecodeToOptions(fs[1])
+		as = append(as, args...)
+		for k, v := range wkargs {
+			kargs[k] = v
 		}
-
+		// kargs = wkargs
+	} else {
+		as = append(as, strings.TrimSpace(raw))
 	}
-	// else {
-	// 	if isKargs(as[1]) {
-	// 		as = []string{as[0]}
-	// 		kas = append(kas, parseArg(as[1]))
-	// 	}
-	// }
-	kargs = parseKargs(kas...)
 	return
+	// kas := []string{}
+	// // L("argc :", len(as))
+	// if len(as) > 1 {
+	// 	if strings.Contains(as[1], ",") {
+	// 		argsStr := as[1]
+	// 		as = []string{as[0]}
+	// 		for _, w2 := range splitargs(argsStr) {
+	// 			if isKargs(w2) {
+	// 				kas = append(kas, parseArg(w2))
+	// 			} else {
+	// 				as = append(as, parseArg(w2))
+
+	// 			}
+
+	// 		}
+	// 	} else {
+	// 		needremove := []string{}
+	// 		for i := range as {
+	// 			w2 := as[i]
+	// 			if isKargs(w2) {
+	// 				kas = append(kas, parseArg(w2))
+	// 				needremove = append(needremove, w2)
+	// 			}
+	// 		}
+	// 		for _, is := range needremove {
+	// 			as = remove(as, is)
+	// 		}
+	// 	}
+
+	// }
+	// // else {
+	// // 	if isKargs(as[1]) {
+	// // 		as = []string{as[0]}
+	// // 		kas = append(kas, parseArg(as[1]))
+	// // 	}
+	// // }
+	// kargs = parseKargs(kas...)
+	// return
 }
 
 func isKargs(raw string) (ok bool) {

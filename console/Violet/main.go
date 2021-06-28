@@ -50,6 +50,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	
 	defer browser.Close()
 	if cli {
 		mode := ""

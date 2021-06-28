@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	jupyter "github.com/Qingluan/jupyter/http"
 	"github.com/tebeka/selenium"
 )
 
@@ -94,6 +96,65 @@ func (self *BaseBrowser) OperScrollTo(id string, args []string, kargs Dict) (res
 		if w, err := strconv.Atoi(t.(string)); err == nil {
 			time.Sleep(time.Duration(w) * time.Second)
 		}
+	}
+	return
+}
+
+func (self *BaseBrowser) OperPush(id string, args []string, kargs Dict) (res Result) {
+	server, ok := kargs["server"]
+
+	_, useIframe := kargs["iframe"]
+	attrs, hasattrs := kargs["attrs"]
+	if !ok {
+		L("must set kargs['server'] ")
+		return
+	}
+	d, ok := kargs["ding"]
+	if ok {
+		self.PushAPI = d.(string)
+	}
+	if id != "" {
+		var eles []selenium.WebElement
+		if useIframe {
+			eles, res.Err = self.SmartFindEles(id, "")
+		} else {
+			eles, res.Err = self.SmartFindEles(id)
+		}
+		page := ""
+		for _, ele := range eles {
+			ss := make(map[string]string)
+
+			ss["html"], _ = ele.GetAttribute("outerHTML")
+			ss["text"], _ = ele.Text()
+			if hasattrs {
+
+				switch attrs.(type) {
+				case []string:
+					for _, k := range attrs.([]string) {
+						if k == "text" {
+							ss["text"], _ = ele.Text()
+						} else {
+							ss[k], _ = ele.GetAttribute(k)
+						}
+					}
+				case string:
+					k := attrs.(string)
+					if k == "text" {
+						ss["text"], _ = ele.Text()
+					} else {
+						ss[k], _ = ele.GetAttribute(k)
+					}
+				}
+
+			}
+			res, _ := json.Marshal(&ss)
+			page += string(res) + "\n"
+
+		}
+		push(server.(string), page, "json")
+	} else {
+		page, _ := self.driver.PageSource()
+		push(server.(string), page, "html")
 	}
 	return
 }
@@ -288,7 +349,13 @@ func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict)
 	defer fp.Close()
 	var eles []selenium.WebElement
 	// var ok bool
-	eles, res.Err = self.SmartFindEles(id)
+
+	_, useIframe := kargs["iframe"]
+	if useIframe {
+		eles, res.Err = self.SmartFindEles(id, "")
+	} else {
+		eles, res.Err = self.SmartFindEles(id)
+	}
 	index := -1
 	if indexstr, ok := kargs["index"]; ok {
 		index, _ = strconv.Atoi(indexstr.(string))
@@ -296,20 +363,42 @@ func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict)
 	do := func(ele selenium.WebElement, attrs []string, kargs Dict) {
 
 		if multi, ok := kargs["multi"]; ok {
-			sss := make(map[string][]string)
-			sss["multi"] = []string{}
+			sss := make(map[string]interface{})
+			arrs := []string{}
 			switch multi.(type) {
 			case []string:
 
 				for _, subid := range multi.([]string) {
-					subele, _ := self.SmartFindByFromEle(ele, subid)
-					sss["multi"] = append(sss["multi"], self.EleToJson(subele))
+					if strings.Contains(subid, ":") {
+						fs := strings.SplitN(subid, ":", 2)
+						id := strings.TrimSpace(fs[0])
+						attr := strings.TrimSpace(fs[1])
+
+						subele, _ := self.SmartFindByFromEle(ele, id)
+						arrs = append(arrs, self.EleToJson(subele, attr))
+					} else {
+						subele, _ := self.SmartFindByFromEle(ele, subid)
+						arrs = append(arrs, self.EleToJson(subele))
+					}
 				}
 			case string:
-				subele, _ := self.SmartFindByFromEle(ele, multi.(string))
-				sss["multi"] = append(sss["multi"], self.EleToJson(subele))
+				subid := multi.(string)
+				if strings.Contains(subid, ":") {
+
+					fs := strings.SplitN(subid, ":", 2)
+					id := strings.TrimSpace(fs[0])
+					attr := strings.TrimSpace(fs[1])
+					subele, _ := self.SmartFindByFromEle(ele, id)
+					arrs = append(arrs, self.EleToJson(subele, attr))
+				} else {
+					subele, _ := self.SmartFindByFromEle(ele, subid)
+					arrs = append(arrs, self.EleToJson(subele))
+				}
 				// fp.WriteString(self.EleToJson(subele) + "\n")
 			}
+			sss["multi"] = arrs
+			sss["html"], _ = ele.GetAttribute("outerHTML")
+			sss["text"], _ = ele.Text()
 			resStr, _ := json.Marshal(sss)
 			fp.WriteString(string(resStr) + "\n")
 		} else {
@@ -354,4 +443,12 @@ func (self *BaseBrowser) OperCollectSingle(id string, args []string, kargs Dict)
 	}
 	return
 
+}
+
+func push(server, page, tp string) {
+	sess := jupyter.NewSession()
+	sess.Json(server, map[string]interface{}{
+		"page": page,
+		"tp":   tp,
+	})
 }

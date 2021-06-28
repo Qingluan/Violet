@@ -349,6 +349,8 @@ func (self *BaseBrowser) Action(id string, action string, kargs Dict, args ...st
 	// 	res.Bool = true
 	// 	// return
 	// }
+	case "push":
+		res = self.OperPush(id, args, kargs)
 	case "collect":
 		res = self.OperCollectSingle(id, args, kargs)
 	case "search":

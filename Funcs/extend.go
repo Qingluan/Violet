@@ -32,6 +32,7 @@ type Service struct {
 type ServiceOption func(*Service) error
 
 func (self *BaseBrowser) PhantomJSService(port int, proxy ...string) (s *Service, err error) {
+	L("Start phantomjs:", port)
 	opt := ""
 	if proxy != nil {
 		if strings.HasPrefix(proxy[0], "socks5://") {

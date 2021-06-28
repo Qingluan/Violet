@@ -68,6 +68,7 @@ type BaseBrowser struct {
 	TmpPage         string
 	TmpID           string
 	Proxy           string
+	Ua              string
 	driver          selenium.WebDriver
 	loger           io.WriteCloser
 	log             string
@@ -78,6 +79,7 @@ type BaseBrowser struct {
 	// OperNow         string
 	option_casp   selenium.Capabilities
 	option_prefix string
+	PushAPI       string
 	NextLine      int
 }
 type Result struct {
@@ -126,6 +128,7 @@ browser = chrome
 path = chromedriver
 #path = chromedriver.exe
 timeout = 4
+UA = Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36
 	
 	`)
 }
@@ -145,6 +148,7 @@ func NewBaseBrowser() (browser *BaseBrowser, err error) {
 	browser.Path = b.ValueOf("path")
 	browser.Proxy = b.ValueOf("proxy")
 	browser.log = b.ValueOf("log")
+	browser.Ua = b.ValueOf("UA")
 	ti := b.ValueOf("timeout")
 	i, _ := strconv.Atoi(ti)
 	browser.PageLoadTime = i
@@ -161,16 +165,22 @@ func (self *BaseBrowser) Init() error {
 		// "phantomjs.binary.path": self.Path, // path to binary from http://phantomjs.org/
 	}
 	prefixURL := fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
+	// L(self.Name)
 	switch self.Name {
 	case "phantomjs":
 
 		caps["phantomjs.binary.path"] = self.Path
-		caps["phantomjs.page.settings.userAgent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.3"
+		if self.Ua != "" {
+			caps["phantomjs.page.settings.userAgent"] = self.Ua
+		} else {
+			caps["phantomjs.page.settings.userAgent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.3"
+		}
 		// selenium.SetDebug(true)
 		if self.Proxy != "" {
 			L("Use Proxy:", self.Proxy)
 		}
 		// if sys.
+		// fmt.Println("do some")
 
 		prefixURL := fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port+1)
 		var err error
@@ -180,7 +190,9 @@ func (self *BaseBrowser) Init() error {
 				return err
 			}
 		}
+		// fmt.Println("do some")
 		service, err := self.PhantomJSService(port+1, self.Proxy)
+		// fmt.Println("do some --")
 		if err != nil {
 			panic(err)
 		}
@@ -196,6 +208,8 @@ func (self *BaseBrowser) Init() error {
 		self.driver = driver
 
 	default:
+
+		// fmt.Println("do some")
 		caps["acceptInsecureCerts"] = true
 		caps["args"] = []string{
 			//https://peter.sh/experiments/chromium-command-line-switches/
@@ -566,9 +580,20 @@ func (self *BaseBrowser) SmartFindByFromEle(ele selenium.WebElement, id string) 
 	return
 }
 
-func (self *BaseBrowser) SmartFindEles(id string) (eles []selenium.WebElement, err error) {
+func (self *BaseBrowser) SmartFindEles(id string, frameID ...string) (eles []selenium.WebElement, err error) {
 	id = strings.TrimSpace(id)
 	var pipe []string
+	if frameID != nil {
+		element, err := self.driver.FindElement(selenium.ByCSSSelector, "iframe"+frameID[0])
+		if err != nil {
+			log.Println("can not found iframe :", frameID[0])
+		}
+		//切换到iframe中
+		err = self.driver.SwitchFrame(element)
+		if err != nil {
+			log.Println("switch frame:", err)
+		}
+	}
 	if strings.Contains(id, "|") {
 		for i, ii := range strings.Split(id, "|") {
 			if i == 0 {
